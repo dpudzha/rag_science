@@ -1,35 +1,71 @@
 """Read PDFs from folder, chunk text, store in FAISS."""
+import hashlib
+import json
 import fitz
 from pathlib import Path
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_ollama import OllamaEmbeddings
-from config import *
+from config import (
+    PAPERS_DIR,
+    VECTORSTORE_DIR,
+    INGEST_RECORD,
+    CHUNK_SIZE,
+    CHUNK_OVERLAP,
+    CHUNK_SEPARATORS,
+    OLLAMA_BASE_URL,
+    EMBEDDING_MODEL,
+)
+
+
+def file_hash(path: str) -> str:
+    return hashlib.md5(Path(path).read_bytes()).hexdigest()
+
+
+def load_ingest_record() -> dict:
+    record_path = Path(INGEST_RECORD)
+    if record_path.exists():
+        return json.loads(record_path.read_text())
+    return {}
+
+
+def save_ingest_record(record: dict):
+    Path(INGEST_RECORD).write_text(json.dumps(record, indent=2))
 
 
 def extract_text_from_pdf(pdf_path: str) -> dict:
-    doc = fitz.open(pdf_path)
-    text = ""
-    for page in doc:
-        text += page.get_text("text") + "\n"
-    doc.close()
+    pages = []
+    with fitz.open(pdf_path) as doc:
+        for page_num, page in enumerate(doc, start=1):
+            text = page.get_text("text")
+            if text.strip():
+                pages.append({"text": text, "page": page_num})
     return {
-        "text": text,
+        "pages": pages,
         "source": Path(pdf_path).name,
     }
 
 
-def load_all_pdfs(folder: str) -> list[dict]:
+def load_new_pdfs(folder: str) -> list[dict]:
     pdfs = list(Path(folder).glob("*.pdf"))
-    print(f"Found {len(pdfs)} PDFs")
+    record = load_ingest_record()
+    print(f"Found {len(pdfs)} PDFs total")
+
     docs = []
     for pdf_path in pdfs:
+        h = file_hash(str(pdf_path))
+        if h in record:
+            print(f"  - {pdf_path.name} (already ingested, skipping)")
+            continue
         try:
             doc = extract_text_from_pdf(str(pdf_path))
+            doc["hash"] = h
             docs.append(doc)
-            print(f"  ✓ {doc['source']}")
+            print(f"  + {doc['source']} (new)")
         except Exception as e:
-            print(f"  ✗ {pdf_path.name}: {e}")
+            print(f"  ! {pdf_path.name}: {e}")
+
+    print(f"{len(docs)} new PDFs to ingest")
     return docs
 
 
@@ -37,36 +73,63 @@ def chunk_documents(docs: list[dict]) -> list:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
         chunk_overlap=CHUNK_OVERLAP,
+        separators=CHUNK_SEPARATORS,
     )
     all_chunks = []
     for doc in docs:
-        chunks = splitter.create_documents(
-            texts=[doc["text"]],
-            metadatas=[{"source": doc["source"]}],
-        )
-        all_chunks.extend(chunks)
+        for page_info in doc["pages"]:
+            chunks = splitter.create_documents(
+                texts=[page_info["text"]],
+                metadatas=[{"source": doc["source"], "page": page_info["page"]}],
+            )
+            all_chunks.extend(chunks)
     print(f"Created {len(all_chunks)} chunks")
     return all_chunks
 
 
-def build_vectorstore(chunks) -> FAISS:
-    embeddings = OllamaEmbeddings(
+def get_embeddings() -> OllamaEmbeddings:
+    return OllamaEmbeddings(
         model=EMBEDDING_MODEL,
         base_url=OLLAMA_BASE_URL,
     )
-    vectorstore = FAISS.from_documents(chunks, embeddings)
-    vectorstore.save_local(VECTORSTORE_DIR)
+
+
+def build_vectorstore(chunks, existing_store=None) -> FAISS:
+    embeddings = get_embeddings()
+    new_store = FAISS.from_documents(chunks, embeddings)
+    if existing_store:
+        existing_store.merge_from(new_store)
+        existing_store.save_local(VECTORSTORE_DIR)
+        print(f"Merged into existing vectorstore at {VECTORSTORE_DIR}")
+        return existing_store
+    new_store.save_local(VECTORSTORE_DIR)
     print(f"Vectorstore saved to {VECTORSTORE_DIR}")
-    return vectorstore
+    return new_store
+
+
+def load_existing_vectorstore():
+    index_path = Path(VECTORSTORE_DIR) / "index.faiss"
+    if index_path.exists():
+        return FAISS.load_local(
+            VECTORSTORE_DIR, get_embeddings(), allow_dangerous_deserialization=True
+        )
+    return None
 
 
 def ingest():
-    docs = load_all_pdfs(PAPERS_DIR)
+    docs = load_new_pdfs(PAPERS_DIR)
     if not docs:
-        print("No PDFs found. Drop some into ./papers/")
+        print("Nothing new to ingest.")
         return
+
     chunks = chunk_documents(docs)
-    build_vectorstore(chunks)
+    existing = load_existing_vectorstore()
+    build_vectorstore(chunks, existing)
+
+    record = load_ingest_record()
+    for doc in docs:
+        record[doc["hash"]] = doc["source"]
+    save_ingest_record(record)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,8 @@
+langchain>=1.2
+langchain-classic>=1.0
+langchain-community>=0.4
+langchain-ollama>=1.0
+langchain-text-splitters>=1.1
+PyMuPDF>=1.27
+faiss-cpu>=1.13
+rank-bm25>=0.2.2

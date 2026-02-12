@@ -1,8 +1,10 @@
 """Read PDFs from folder, chunk text, store in FAISS."""
+import bisect
 import hashlib
 import json
 import fitz
 from pathlib import Path
+from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
 from langchain_ollama import OllamaEmbeddings
@@ -69,6 +71,12 @@ def load_new_pdfs(folder: str) -> list[dict]:
     return docs
 
 
+def _page_at_offset(page_offsets: list[int], page_numbers: list[int], offset: int) -> int:
+    """Return the page number for a given character offset in the concatenated text."""
+    idx = bisect.bisect_right(page_offsets, offset) - 1
+    return page_numbers[max(0, idx)]
+
+
 def chunk_documents(docs: list[dict]) -> list:
     splitter = RecursiveCharacterTextSplitter(
         chunk_size=CHUNK_SIZE,
@@ -77,12 +85,27 @@ def chunk_documents(docs: list[dict]) -> list:
     )
     all_chunks = []
     for doc in docs:
+        # Concatenate all pages into one text, tracking page boundary offsets
+        full_text = ""
+        page_offsets = []   # character offset where each page starts
+        page_numbers = []   # corresponding page number
         for page_info in doc["pages"]:
-            chunks = splitter.create_documents(
-                texts=[page_info["text"]],
-                metadatas=[{"source": doc["source"], "page": page_info["page"]}],
-            )
-            all_chunks.extend(chunks)
+            page_offsets.append(len(full_text))
+            page_numbers.append(page_info["page"])
+            full_text += page_info["text"] + "\n"
+
+        if not full_text.strip():
+            continue
+
+        # Chunk the full document text (paragraphs spanning pages stay together)
+        chunks = splitter.split_text(full_text)
+        for chunk_text in chunks:
+            offset = full_text.find(chunk_text)
+            page = _page_at_offset(page_offsets, page_numbers, offset)
+            all_chunks.append(Document(
+                page_content=chunk_text,
+                metadata={"source": doc["source"], "page": page},
+            ))
     print(f"Created {len(all_chunks)} chunks")
     return all_chunks
 

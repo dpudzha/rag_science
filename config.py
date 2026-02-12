@@ -12,6 +12,10 @@ EMBEDDING_MODEL = "nomic-embed-text"
 LLM_MODEL = "llama3.1:8b"
 
 # Retrieval settings
-TOP_K = 4
+TOP_K_CANDIDATES = 20  # candidates from hybrid retrieval before reranking
+TOP_K = 4              # final results after reranking
 BM25_WEIGHT = 0.3
 DENSE_WEIGHT = 0.7
+
+# Reranking
+RERANK_MODEL = "cross-encoder/ms-marco-MiniLM-L-6-v2"

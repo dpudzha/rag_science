@@ -21,3 +21,14 @@ DENSE_WEIGHT = float(os.getenv("DENSE_WEIGHT", "0.7"))
 
 # Reranking
 RERANK_MODEL = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+# Session management
+SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
+
+# CORS
+CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+
+# Parent document retrieval (Phase 3)
+ENABLE_PARENT_RETRIEVAL = os.getenv("ENABLE_PARENT_RETRIEVAL", "false").lower() == "true"
+CHILD_CHUNK_SIZE = int(os.getenv("CHILD_CHUNK_SIZE", "400"))
+CHILD_CHUNK_OVERLAP = int(os.getenv("CHILD_CHUNK_OVERLAP", "50"))

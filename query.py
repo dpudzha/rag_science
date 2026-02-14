@@ -1,5 +1,6 @@
 """Retrieve relevant chunks and answer questions with hybrid search + reranking."""
 import logging
+import pickle
 import re
 import sys
 from pathlib import Path
@@ -22,11 +23,25 @@ from config import (
     BM25_WEIGHT,
     DENSE_WEIGHT,
     RERANK_MODEL,
+    ENABLE_PARENT_RETRIEVAL,
 )
 
 logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+# Module-level cross-encoder singleton (lazy-loaded)
+_cross_encoder: CrossEncoder | None = None
+
+
+def _get_cross_encoder() -> CrossEncoder:
+    global _cross_encoder
+    if _cross_encoder is None:
+        logger.info("Loading cross-encoder model: %s", RERANK_MODEL)
+        # Suppress noisy model load logs from sentence-transformers
+        logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+        _cross_encoder = CrossEncoder(RERANK_MODEL)
+    return _cross_encoder
 
 
 def tokenize(text: str) -> list[str]:
@@ -63,6 +78,7 @@ class HybridRetriever(BaseRetriever):
     bm25: BM25Okapi
     bm25_docs: list[Document]
     cross_encoder: CrossEncoder
+    parent_chunks: list[Document] | None = None
     k: int = TOP_K
     k_candidates: int = TOP_K_CANDIDATES
     bm25_weight: float = BM25_WEIGHT
@@ -114,9 +130,25 @@ class HybridRetriever(BaseRetriever):
             return []
 
         pairs = [[query, doc.page_content] for doc in candidates]
-        rerank_scores = self.cross_encoder.predict(pairs)
+        rerank_scores = self.cross_encoder.predict(pairs, show_progress_bar=False)
         reranked = sorted(zip(candidates, rerank_scores), key=lambda x: x[1], reverse=True)
-        return [doc for doc, _ in reranked[:self.k]]
+        top_docs = [doc for doc, _ in reranked[:self.k]]
+
+        # If parent-document retrieval is enabled, expand child chunks to parent chunks
+        if self.parent_chunks is not None:
+            expanded = []
+            seen_parents = set()
+            for doc in top_docs:
+                parent_idx = doc.metadata.get("parent_idx")
+                if parent_idx is not None and parent_idx < len(self.parent_chunks):
+                    if parent_idx not in seen_parents:
+                        seen_parents.add(parent_idx)
+                        expanded.append(self.parent_chunks[parent_idx])
+                else:
+                    expanded.append(doc)
+            return expanded
+
+        return top_docs
 
 
 def load_vectorstore() -> FAISS:
@@ -128,17 +160,54 @@ def load_vectorstore() -> FAISS:
     return FAISS.load_local(VECTORSTORE_DIR, embeddings, allow_dangerous_deserialization=True)
 
 
+def load_bm25() -> tuple[BM25Okapi, list[Document]] | None:
+    """Load persisted BM25 index from disk. Returns None if not found."""
+    bm25_path = Path(VECTORSTORE_DIR) / "bm25_index.pkl"
+    if bm25_path.exists():
+        with open(bm25_path, "rb") as f:
+            data = pickle.load(f)
+        logger.info("BM25 index loaded from %s", bm25_path)
+        return data["bm25"], data["docs"]
+    return None
+
+
+def load_parent_chunks() -> list[Document] | None:
+    """Load parent chunks for parent-document retrieval."""
+    parents_path = Path(VECTORSTORE_DIR) / "parent_chunks.pkl"
+    if parents_path.exists():
+        with open(parents_path, "rb") as f:
+            return pickle.load(f)
+    return None
+
+
 def build_retriever(vectorstore: FAISS) -> HybridRetriever:
-    docstore = vectorstore.docstore
-    all_docs = [docstore.search(doc_id) for doc_id in vectorstore.index_to_docstore_id.values()]
-    tokenized = [tokenize(doc.page_content) for doc in all_docs]
-    bm25 = BM25Okapi(tokenized)
-    cross_encoder = CrossEncoder(RERANK_MODEL)
+    # Try to load persisted BM25 index first
+    bm25_data = load_bm25()
+    if bm25_data:
+        bm25, bm25_docs = bm25_data
+    else:
+        # Fallback: rebuild from docstore (backward compatibility)
+        logger.warning("No persisted BM25 index found, rebuilding from docstore")
+        docstore = vectorstore.docstore
+        all_docs = [docstore.search(doc_id) for doc_id in vectorstore.index_to_docstore_id.values()]
+        tokenized = [tokenize(doc.page_content) for doc in all_docs]
+        bm25 = BM25Okapi(tokenized)
+        bm25_docs = all_docs
+
+    cross_encoder = _get_cross_encoder()
+
+    parent_chunks = None
+    if ENABLE_PARENT_RETRIEVAL:
+        parent_chunks = load_parent_chunks()
+        if parent_chunks:
+            logger.info("Parent-document retrieval enabled with %d parent chunks", len(parent_chunks))
+
     return HybridRetriever(
         vectorstore=vectorstore,
         bm25=bm25,
-        bm25_docs=all_docs,
+        bm25_docs=bm25_docs,
         cross_encoder=cross_encoder,
+        parent_chunks=parent_chunks,
     )
 
 
@@ -154,17 +223,17 @@ def build_qa_chain(retriever: HybridRetriever):
 
 def print_result(result: dict):
     print(f"\nAnswer:\n{result['answer']}\n")
-    print("Sources:")
     seen = set()
+    pages = []
     for doc in result["source_documents"]:
         source = doc.metadata.get("source", "unknown")
         page = doc.metadata.get("page", "?")
         key = (source, page)
-        if key in seen:
-            continue
-        seen.add(key)
-        snippet = doc.page_content[:150].replace("\n", " ")
-        print(f"  - {source} (p.{page}): {snippet}...")
+        if key not in seen:
+            seen.add(key)
+            pages.append(f"{source} p.{page}")
+    if pages:
+        print(f"Sources: {', '.join(pages)}")
 
 
 def interactive():
@@ -203,7 +272,8 @@ def ask(question: str):
 
 
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+    from logging_config import setup_logging
+    setup_logging()
     args = sys.argv[1:]
     if args:
         ask(" ".join(args))

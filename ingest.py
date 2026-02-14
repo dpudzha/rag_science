@@ -2,6 +2,7 @@
 import bisect
 import hashlib
 import json
+import logging
 import fitz
 from pathlib import Path
 from langchain_core.documents import Document
@@ -18,6 +19,8 @@ from config import (
     OLLAMA_BASE_URL,
     EMBEDDING_MODEL,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def file_hash(path: str) -> str:
@@ -51,23 +54,23 @@ def extract_text_from_pdf(pdf_path: str) -> dict:
 def load_new_pdfs(folder: str) -> list[dict]:
     pdfs = list(Path(folder).glob("*.pdf"))
     record = load_ingest_record()
-    print(f"Found {len(pdfs)} PDFs total")
+    logger.info("Found %d PDFs total", len(pdfs))
 
     docs = []
     for pdf_path in pdfs:
         h = file_hash(str(pdf_path))
         if h in record:
-            print(f"  - {pdf_path.name} (already ingested, skipping)")
+            logger.info("  - %s (already ingested, skipping)", pdf_path.name)
             continue
         try:
             doc = extract_text_from_pdf(str(pdf_path))
             doc["hash"] = h
             docs.append(doc)
-            print(f"  + {doc['source']} (new)")
+            logger.info("  + %s (new)", doc["source"])
         except Exception as e:
-            print(f"  ! {pdf_path.name}: {e}")
+            logger.warning("  ! %s: %s", pdf_path.name, e)
 
-    print(f"{len(docs)} new PDFs to ingest")
+    logger.info("%d new PDFs to ingest", len(docs))
     return docs
 
 
@@ -106,7 +109,7 @@ def chunk_documents(docs: list[dict]) -> list:
                 page_content=chunk_text,
                 metadata={"source": doc["source"], "page": page},
             ))
-    print(f"Created {len(all_chunks)} chunks")
+    logger.info("Created %d chunks", len(all_chunks))
     return all_chunks
 
 
@@ -123,10 +126,10 @@ def build_vectorstore(chunks, existing_store=None) -> FAISS:
     if existing_store:
         existing_store.merge_from(new_store)
         existing_store.save_local(VECTORSTORE_DIR)
-        print(f"Merged into existing vectorstore at {VECTORSTORE_DIR}")
+        logger.info("Merged into existing vectorstore at %s", VECTORSTORE_DIR)
         return existing_store
     new_store.save_local(VECTORSTORE_DIR)
-    print(f"Vectorstore saved to {VECTORSTORE_DIR}")
+    logger.info("Vectorstore saved to %s", VECTORSTORE_DIR)
     return new_store
 
 
@@ -140,9 +143,12 @@ def load_existing_vectorstore():
 
 
 def ingest():
+    from health import check_ollama
+    check_ollama()
+
     docs = load_new_pdfs(PAPERS_DIR)
     if not docs:
-        print("Nothing new to ingest.")
+        logger.info("Nothing new to ingest.")
         return
 
     chunks = chunk_documents(docs)
@@ -156,4 +162,5 @@ def ingest():
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     ingest()

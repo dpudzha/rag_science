@@ -1,4 +1,5 @@
 """Retrieve relevant chunks and answer questions with hybrid search + reranking."""
+import logging
 import re
 import sys
 from pathlib import Path
@@ -22,6 +23,8 @@ from config import (
     DENSE_WEIGHT,
     RERANK_MODEL,
 )
+
+logger = logging.getLogger(__name__)
 
 _TOKEN_RE = re.compile(r"[a-z0-9]+")
 
@@ -119,8 +122,7 @@ class HybridRetriever(BaseRetriever):
 def load_vectorstore() -> FAISS:
     index_path = Path(VECTORSTORE_DIR) / "index.faiss"
     if not index_path.exists():
-        print(f"No vectorstore found at {VECTORSTORE_DIR}/")
-        print("Run 'python ingest.py' first to ingest PDFs.")
+        logger.error("No vectorstore found at %s/. Run 'python ingest.py' first to ingest PDFs.", VECTORSTORE_DIR)
         sys.exit(1)
     embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=OLLAMA_BASE_URL)
     return FAISS.load_local(VECTORSTORE_DIR, embeddings, allow_dangerous_deserialization=True)
@@ -166,6 +168,9 @@ def print_result(result: dict):
 
 
 def interactive():
+    from health import check_ollama
+    check_ollama()
+
     vectorstore = load_vectorstore()
     retriever = build_retriever(vectorstore)
     qa = build_qa_chain(retriever)
@@ -187,6 +192,9 @@ def interactive():
 
 
 def ask(question: str):
+    from health import check_ollama
+    check_ollama()
+
     vectorstore = load_vectorstore()
     retriever = build_retriever(vectorstore)
     qa = build_qa_chain(retriever)
@@ -195,6 +203,7 @@ def ask(question: str):
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
     args = sys.argv[1:]
     if args:
         ask(" ".join(args))

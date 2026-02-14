@@ -1,0 +1,29 @@
+services:
+  rag:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./papers:/app/papers
+      - ./vectorstore:/app/vectorstore
+    environment:
+      - OLLAMA_BASE_URL=http://ollama:11434
+    depends_on:
+      - ollama
+
+  ollama:
+    image: ollama/ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+volumes:
+  ollama_data:

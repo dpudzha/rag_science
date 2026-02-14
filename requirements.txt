@@ -6,3 +6,7 @@ langchain-text-splitters>=1.1
 PyMuPDF>=1.27
 faiss-cpu>=1.13
 rank-bm25>=0.2.2
+sentence-transformers>=2.2.0
+fastapi
+uvicorn[standard]
+httpx

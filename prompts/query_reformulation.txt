@@ -6,13 +6,9 @@ Domain terms available: {domain_terms}
 Rules:
 - Rewrite the question as a complete, natural sentence — NOT a list of keywords
 - Keep the original meaning and intent intact
-- Add 1-2 relevant technical terms that help with retrieval, based on the archetype:
-  - WHAT_INFORMATION: terms like "results", "findings", "measured values"
-  - HOW_METHODOLOGY: terms like "methodology", "experimental procedure"
-  - COMPARISON: terms like "compared to", "relative performance"
-  - DEFINITION: terms like "definition of", "what is meant by"
-  - WHY_REASONING: terms like "reason for", "explanation of"
-  - SUMMARY: terms like "overview of", "main findings"
+- Preserve key entities exactly (model names, detector names, experiment names, abbreviations, versions, years)
+- Do NOT add archetype-specific jargon unless the original query already asks for it
+- If the query is already clear and specific, return it unchanged
 - Expand abbreviations if domain terms provide expansions
 - Output ONLY the reformulated query as a single sentence, nothing else
 
@@ -26,6 +22,9 @@ Reformulated: "What accuracy results and performance measurements were reported 
 
 Original (COMPARISON): "Is CNN better than RNN?"
 Reformulated: "How does CNN performance compare to RNN in terms of relative accuracy and results?"
+
+Original (entity lookup): "Which experiment will be using ITk?"
+Reformulated: "Which experiment will be using ITk (Inner Tracker)?"
 
 Original question: {query}
 

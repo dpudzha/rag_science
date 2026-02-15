@@ -117,3 +117,17 @@ class TestQueryReformulator:
         )
         result = reformulator.reformulate("test query", "WHAT_INFORMATION")
         assert result == "reformulated query"
+
+    def test_rejects_methodology_drift_for_entity_lookup(self):
+        reformulator = self._make_reformulator(
+            "What experimental procedure and methodology will the experiment using ITk follow?"
+        )
+        original = "Which experiment will be using ITk?"
+        result = reformulator.reformulate(original, "HOW_METHODOLOGY")
+        assert result == original
+
+    def test_rejects_rewrite_that_drops_key_entity(self):
+        reformulator = self._make_reformulator("What dataset was used in the experiment?")
+        original = "What accuracy did BERT get?"
+        result = reformulator.reformulate(original, "WHAT_INFORMATION")
+        assert result == original

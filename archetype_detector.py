@@ -1,6 +1,7 @@
 """Archetype detection and query reformulation for improved retrieval."""
 import json
 import logging
+import re
 from pathlib import Path
 
 from langchain_ollama import ChatOllama
@@ -87,6 +88,60 @@ class QueryReformulator:
         )
         self._terminology = _load_domain_terminology(terminology_path)
 
+    @staticmethod
+    def _content_tokens(text: str) -> set[str]:
+        stop_words = {
+            "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "does", "for",
+            "from", "how", "in", "is", "it", "of", "on", "or", "that", "the", "they",
+            "this", "to", "was", "what", "when", "where", "which", "who", "why", "will",
+            "with",
+        }
+        tokens = set(re.findall(r"[A-Za-z0-9][A-Za-z0-9\-]{1,}", text.lower()))
+        return {tok for tok in tokens if tok not in stop_words}
+
+    @staticmethod
+    def _entity_tokens(text: str) -> set[str]:
+        return {
+            tok for tok in re.findall(r"\b[A-Za-z0-9][A-Za-z0-9\-]{1,}\b", text)
+            if any(ch.isupper() for ch in tok) or any(ch.isdigit() for ch in tok)
+        }
+
+    @staticmethod
+    def _asks_methodology(text: str) -> bool:
+        lowered = text.lower()
+        method_cues = ("method", "methodology", "procedure", "protocol", "technique", "trained", "training", "how ")
+        return any(cue in lowered for cue in method_cues)
+
+    def _is_safe_rewrite(self, original: str, rewritten: str, archetype: str) -> bool:
+        """Reject rewrites that drift away from the original query intent."""
+        if original.strip().lower() == rewritten.strip().lower():
+            return True
+
+        original_tokens = self._content_tokens(original)
+        rewritten_tokens = self._content_tokens(rewritten)
+        if original_tokens:
+            overlap = len(original_tokens & rewritten_tokens) / len(original_tokens)
+            if overlap < 0.5:
+                return False
+
+        # Preserve high-signal entities like ITk, BERT, Stage-2, years, versions.
+        missing_entities = {
+            ent.lower() for ent in self._entity_tokens(original)
+            if ent.lower() not in rewritten.lower()
+        }
+        if missing_entities:
+            return False
+
+        # Guard against misclassified archetype injecting methodology wording.
+        if archetype == "HOW_METHODOLOGY":
+            has_method_terms = any(
+                term in rewritten.lower() for term in ("methodology", "experimental procedure", "procedure")
+            )
+            if has_method_terms and not self._asks_methodology(original):
+                return False
+
+        return True
+
     def reformulate(self, query: str, archetype: str) -> str:
         """Rewrite the query with domain awareness. Falls back to original on error."""
         domain_terms = ""
@@ -105,8 +160,10 @@ class QueryReformulator:
             response = self._llm.invoke([HumanMessage(content=prompt)])
             reformulated = response.content.strip()
             if reformulated:
-                logger.info("Reformulated: '%s' -> '%s'", query[:60], reformulated[:60])
-                return reformulated
+                if self._is_safe_rewrite(query, reformulated, archetype):
+                    logger.info("Reformulated: '%s' -> '%s'", query[:60], reformulated[:60])
+                    return reformulated
+                logger.info("Rejected reformulation drift, keeping original query: '%s'", query[:60])
             return query
         except Exception as e:
             logger.warning("Query reformulation failed (%s), using original", e)

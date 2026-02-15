@@ -1,0 +1,152 @@
+[
+    {
+        "question": "What CMOS technology node is the ITkPixV2 chip fabricated in?",
+        "ideal_answer": "ITkPixV2 is fabricated in 65nm CMOS technology.",
+        "expected_sources": ["2502.05097v1.pdf", "1_ATLAS ITk Pixel Detector Overview.pdf"],
+        "expected_pages": [2, 3]
+    },
+    {
+        "question": "What is the pixel size of ITkPixV2?",
+        "ideal_answer": "ITkPixV2 has a pixel size of 50 by 50 micrometers.",
+        "expected_sources": ["2502.05097v1.pdf", "rd53cATLAS1v92.pdf", "6_ATLAS ITk pixel detector overview.pdf"],
+        "expected_pages": [2, 6, 3]
+    },
+    {
+        "question": "How many modules make up the ITk Pixel detector and how are they arranged?",
+        "ideal_answer": "The ITk Pixel detector consists of 9716 modules arranged in 5 cylindrical barrel layers, covering approximately 13 square meters of instrumented area with pseudorapidity coverage up to |eta| < 4.",
+        "expected_sources": ["1_Alkakhi_2024_J._Inst._19_C11013.pdf", "6_ATLAS ITk pixel detector overview.pdf", "1_ATLAS ITk Pixel Detector Overview.pdf"],
+        "expected_pages": [1, 1, 2]
+    },
+    {
+        "question": "What is the trigger rate requirement for the ITkPixV2 chip and how does it compare to the previous generation?",
+        "ideal_answer": "The trigger rate requirement for ITkPixV2 is 1 MHz, which is a 10x increase compared to the previous FE-I4 chip's 100 kHz trigger rate.",
+        "expected_sources": ["2502.05097v1.pdf", "introduction_guide.pdf", "6_ATLAS ITk pixel detector overview.pdf"],
+        "expected_pages": [2, 5, 3]
+    },
+    {
+        "question": "What are the specifications of the FELIX FLX-712 PCIe card used in the ATLAS DAQ system?",
+        "ideal_answer": "The FLX-712 is a PCIe card with a 16-lane PCIe Gen3 interface, a Xilinx Ultrascale FPGA (XCKU115-FLV-1924), 8 Avago Minipod transceivers (4 TX and 4 RX), optical link speeds up to 12.8 Gbps, PCIe throughput of approximately 100 Gb/s, and power consumption of at most 65 W.",
+        "expected_sources": ["2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf"],
+        "expected_pages": [3, 4]
+    },
+    {
+        "question": "How many Optoboards are required for the ITk Pixel Detector and what do they do?",
+        "ideal_answer": "1564 Optoboards are required for reading out the entire ITk Pixel Detector, plus 16 additional Optoboards for the Pixel Luminosity Ring (PLR) and Beam and Control Monitor (BCM) detectors. Each Optoboard serializes 24x1.28 Gbps electrical uplinks into 4x10.24 Gbps optical uplinks, and deserializes 2.56 Gbps optical downlinks into up to 8x160 Mbps electrical downlinks.",
+        "expected_sources": ["2_AT2_IP_MG_0010_v2.7.pdf", "1_ACES20200528_Poster_MC_v1.pdf"],
+        "expected_pages": [1, 1]
+    },
+    {
+        "question": "What radiation tolerance is required for the inner pixel layers at the HL-LHC?",
+        "ideal_answer": "The inner pixel layers must withstand approximately 500 Mrad of ionizing radiation and a non-ionizing fluence of 1.0x10^16 neq/cm2. The innermost two layers (B0 and B1) are designed to be replaced after 2000 fb-1 of integrated luminosity, roughly halfway through the HL-LHC program.",
+        "expected_sources": ["6_ATLAS ITk pixel detector overview.pdf", "introduction_guide.pdf", "2502.05097v1.pdf", "4_20230905_TIPP2023.pdf"],
+        "expected_pages": [1, 6, 2, 5]
+    },
+    {
+        "question": "What powering scheme do RD53 chips use and why?",
+        "ideal_answer": "RD53 chips use a serial powering scheme with Shunt Low Drop Output (SLDO) power regulators on-chip. Direct powering of more than 10,000 pixel chips would require an unacceptable material budget from power cabling, so serial powering allows 10-14 modules to be powered in series, reusing injected current.",
+        "expected_sources": ["introduction_guide.pdf", "rd53cATLAS1v92.pdf", "6_ATLAS ITk pixel detector overview.pdf"],
+        "expected_pages": [6, 7, 4]
+    },
+    {
+        "question": "What are the differences between the 3D and planar sensor technologies used in the ITk Pixel detector?",
+        "ideal_answer": "3D sensors are used in the innermost layer (B0) with pixel cells of 25x100 micrometers in the barrel and 50x50 micrometers in the endcap, with 150 micrometer active substrate. They achieve >97% hit efficiency at bias voltages below 100 V. Planar sensors are used in outer layers with 150 micrometer active thickness (100 micrometer for layer B1), n-in-p configuration, and achieve >97% hit efficiency at approximately 300 V bias after irradiation to 5x10^15 neq/cm2.",
+        "expected_sources": ["1_ATLAS ITk Pixel Detector Overview.pdf", "6_ATLAS ITk pixel detector overview.pdf", "4_20230905_TIPP2023.pdf"],
+        "expected_pages": [4, 2, 8]
+    },
+    {
+        "question": "What threshold and noise performance was measured for ITkPixV2?",
+        "ideal_answer": "ITkPixV2 achieved a threshold mean of 968.8 plus or minus 41.7 electrons and a noise mean of 53.0 plus or minus 10.1 electrons. The injection capacitance was measured at 7.7 fF, in good agreement with the design value of 8 fF.",
+        "expected_sources": ["ITkPixV2_Mironova.pdf"],
+        "expected_pages": [8, 11]
+    },
+    {
+        "question": "What is the total pixel array size of the ATLAS version of the RD53C chip?",
+        "ideal_answer": "The ATLAS version of the RD53C chip has a pixel array of 400 columns by 384 rows, for a total of 153,600 pixels, with a chip size of 20 mm by 21 mm.",
+        "expected_sources": ["rd53cATLAS1v92.pdf", "introduction_guide.pdf", "ITkPixV2_Mironova.pdf"],
+        "expected_pages": [6, 6, 2]
+    },
+    {
+        "question": "What is the expected peak luminosity at the HL-LHC and how many pile-up events per bunch crossing are expected?",
+        "ideal_answer": "The HL-LHC is expected to reach a peak luminosity of 5 to 7.5 times 10^34 cm-2 s-1, with approximately 140-200 pile-up proton-proton collisions per bunch crossing.",
+        "expected_sources": ["2502.05097v1.pdf", "1_ATLAS ITk Pixel Detector Overview.pdf", "4_20230905_TIPP2023.pdf"],
+        "expected_pages": [1, 2, 2]
+    },
+    {
+        "question": "How does the FELIX software performance compare to Run 3 requirements?",
+        "ideal_answer": "The felix-star software has been tested and verified for trigger rates up to 200 kHz, exceeding the Run 3 requirements by a factor of 2. The SW ROD is capable of event building at rates exceeding 100 kHz with input packet rates up to 120 MHz. Performance is currently limited by network bandwidth at 100 GbE.",
+        "expected_sources": ["2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf"],
+        "expected_pages": [6, 7]
+    },
+    {
+        "question": "What power distribution system is used on the ITk Pixel Optoboards?",
+        "ideal_answer": "The main supply is provided at 9 V and adapted to 2.5 V by bPOL12V converters. The 2.5 V supply powers the VCSEL driver of the VTRx+ module and the bPOL2V5, which provides 1.2 V used by ASICs on the Optoboard. Five bPOL12V converters are mounted on a PCB called a Powerboard, which distributes power to up to eight Optoboards via a Connector board.",
+        "expected_sources": ["2_AT2_IP_MG_0010_v2.7.pdf"],
+        "expected_pages": [4, 5]
+    },
+    {
+        "question": "What were the YARR processing times when running 10 front-end chips simultaneously?",
+        "ideal_answer": "When running 10 ITkPixV1 front-ends simultaneously, YARR achieved a configuration time of 18417 ms, scan time of 12727 ms, processing time of 5476 ms, and analysis time of 772 ms, with no data transmission errors.",
+        "expected_sources": ["1_Alkakhi_2024_J._Inst._19_C11013.pdf"],
+        "expected_pages": [8]
+    },
+    {
+        "question": "What data encoding format is used for the readout links in RD53 chips?",
+        "ideal_answer": "RD53 chips use Aurora 64b/66b encoding for readout links. It supports AC coupling compatible encoding, appropriate formatting and framing, data and service type frames, multi-lane support, and streams with minimized bandwidth overhead.",
+        "expected_sources": ["introduction_guide.pdf", "3_2023_03_06_FELIX_ITk_report.pdf"],
+        "expected_pages": [8, 7]
+    },
+    {
+        "question": "What are the main differences between the ATLAS and CMS versions of the RD53 chip?",
+        "ideal_answer": "The main differences are the pixel matrix size (ATLAS: 400 columns x 384 rows = 153,600 pixels with chip size 20x21 mm; CMS: 432 columns x 336 rows = 145,152 pixels with chip size 21.6x18.6 mm) and the pixel analog front end design. The ATLAS chip uses a differential front-end with threshold ~1000 electrons, dispersion ~30 electrons, and noise 65 electrons, while CMS uses a linear front-end with threshold ~1000 electrons, dispersion ~50 electrons, and noise ~70 electrons.",
+        "expected_sources": ["rd53cATLAS1v92.pdf", "Loddo_PSD13.pdf", "introduction_guide.pdf"],
+        "expected_pages": [4, 9, 6]
+    },
+    {
+        "question": "What monitoring capabilities does the MOPS chip provide for the ITk Pixel Optoboard system?",
+        "ideal_answer": "The MOPS chip monitors all bPOL output voltages (5x 2.5V and 8x 1.2V), output currents of bPOL2V5 chips (8 signals), temperature on Optoboards and Powerboard (8+1 signals), and PTAT output of two bPOL12V chips. Up to four MOPS chips can be connected to one CAN bus, with MOPS independently supplied at 1.6V via an integrated cable.",
+        "expected_sources": ["2_AT2_IP_MG_0010_v2.7.pdf"],
+        "expected_pages": [6]
+    },
+    {
+        "question": "How many FELIX cards are deployed for ATLAS and what is their bit-error rate?",
+        "ideal_answer": "About 100 FELIX cards are installed in 60 servers, with 20 additional servers for SW ROD. A total of 255 FLX-712 boards were produced for the ongoing upgrade. The optical link bit-error rates are less than 10^-15 for each of 48 links.",
+        "expected_sources": ["2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf"],
+        "expected_pages": [4, 7]
+    },
+    {
+        "question": "What module assembly precision is required for the ITk pixel detector?",
+        "ideal_answer": "Module attachment precision must be within plus or minus 50 micrometers in x and y dimensions, with a glue height of 40 plus or minus 15 micrometers. Flex-to-bare-module positioning also requires plus or minus 50 micrometer precision. Wire bond quality is verified through 32 pull tests per module (8 per chip).",
+        "expected_sources": ["Möbius_2022_J._Inst._17_C03042.pdf"],
+        "expected_pages": [5, 6]
+    },
+    {
+        "question": "What is the expected rate of Single Event Upsets (SEUs) for the RD53 chip in the innermost layer?",
+        "ideal_answer": "The expected rate of Single Event Upsets (SEUs) per chip is approximately 100 Hz in the innermost layer.",
+        "expected_sources": ["Loddo_PSD13.pdf"],
+        "expected_pages": [14]
+    },
+    {
+        "question": "How many readout lanes does ITkPixV2 have and what is the maximum data rate?",
+        "ideal_answer": "ITkPixV2 has 4 readout lanes per chip with a maximum of 1.28 Gbps per lane, for a total theoretical data rate of 5.12 Gbps per chip.",
+        "expected_sources": ["2502.05097v1.pdf", "6_ATLAS ITk pixel detector overview.pdf"],
+        "expected_pages": [3, 5]
+    },
+    {
+        "question": "What is the GBT protocol link speed and frame size used by FELIX?",
+        "ideal_answer": "The GBT data frame is 120 bits with a link speed of 4.8 Gb/s, synchronous with the 40.08 MHz LHC clock. A custom 8b/10b encoded protocol in FULL Mode operates at 9.6 Gb/s.",
+        "expected_sources": ["2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf"],
+        "expected_pages": [4]
+    },
+    {
+        "question": "How many pixel modules are planned for the outer and inner systems of the ITk detector?",
+        "ideal_answer": "The outer system uses 6816 planar quad modules with 150 micrometer thick sensors and 50x50 micrometer pixels, producing approximately 11,000 modules including yield. The inner system Layer 0 uses 1188 3D single modules (25x100 micrometer for flat, 50x50 micrometer for endcap), and Layer 1 uses 1200 planar quad modules with 100 micrometer thick sensors, producing approximately 2000 modules of each type including yield.",
+        "expected_sources": ["4_20230905_TIPP2023.pdf"],
+        "expected_pages": [8]
+    },
+    {
+        "question": "What is the physical size of a pixel core in the RD53C framework?",
+        "ideal_answer": "A pixel core in the RD53C framework is physically 400 micrometers by 400 micrometers and contains 8 by 8 pixels (64 pixels total), organized as 16 identical analog islands with 4 front ends each, embedded in a flat digital synthesized sea.",
+        "expected_sources": ["rd53cATLAS1v92.pdf", "introduction_guide.pdf"],
+        "expected_pages": [5, 9]
+    }
+]

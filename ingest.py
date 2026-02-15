@@ -94,7 +94,7 @@ def _detect_section_header(text: str) -> str | None:
 
 
 def load_new_pdfs(folder: str) -> list[dict]:
-    pdfs = list(Path(folder).glob("*.pdf"))
+    pdfs = list(Path(folder).rglob("*.pdf"))
     record = load_ingest_record()
     logger.info("Found %d PDFs total", len(pdfs))
 

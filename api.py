@@ -7,7 +7,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, field_validator
 
-from config import OLLAMA_BASE_URL, SESSION_TTL_SECONDS, CORS_ORIGINS
+from config import (
+    OLLAMA_BASE_URL, SESSION_TTL_SECONDS, CORS_ORIGINS,
+    INTENT_CLASSIFICATION_ENABLED, ENABLE_SQL_AGENT,
+    RELEVANCE_CHECK_ENABLED, RELEVANCE_THRESHOLD, MAX_RETRIEVAL_RETRIES,
+    QUERY_RESOLUTION_ENABLED,
+)
 from health import check_ollama
 from logging_config import setup_logging
 
@@ -17,20 +22,49 @@ logger = logging.getLogger(__name__)
 # --- Lazy-loaded singleton state ---
 _qa_chain = None
 _retriever = None
+_agent = None
+_intent_classifier = None
+_query_resolver = None
 
 # --- Session storage: session_id -> {"history": [...], "last_access": timestamp} ---
 _sessions: dict[str, dict] = {}
 
 
 def _get_qa():
-    """Lazy-load vectorstore, retriever, and QA chain on first query."""
-    global _qa_chain, _retriever
-    if _qa_chain is None:
+    """Lazy-load vectorstore, retriever, and QA chain (or agent) on first query."""
+    global _qa_chain, _retriever, _agent
+    if _qa_chain is None and _agent is None:
         from query import load_vectorstore, build_retriever, build_qa_chain
         vs = load_vectorstore()
         _retriever = build_retriever(vs)
-        _qa_chain = build_qa_chain(_retriever)
-    return _qa_chain
+        if ENABLE_SQL_AGENT:
+            from query import build_agent
+            _agent = build_agent(_retriever)
+        else:
+            _qa_chain = build_qa_chain(_retriever)
+    return _agent or _qa_chain
+
+
+def _get_intent_classifier():
+    """Lazy-load intent classifier if enabled."""
+    global _intent_classifier
+    if not INTENT_CLASSIFICATION_ENABLED:
+        return None
+    if _intent_classifier is None:
+        from intent_classifier import IntentClassifier
+        _intent_classifier = IntentClassifier()
+    return _intent_classifier
+
+
+def _get_query_resolver():
+    """Lazy-load query resolver if enabled."""
+    global _query_resolver
+    if not QUERY_RESOLUTION_ENABLED:
+        return None
+    if _query_resolver is None:
+        from query_resolver import QueryResolver
+        _query_resolver = QueryResolver()
+    return _query_resolver
 
 
 def _get_session_history(session_id: str | None) -> list:
@@ -108,6 +142,9 @@ class QueryResponse(BaseModel):
     answer: str
     sources: list[Source]
     session_id: str | None = None
+    tool_used: str | None = None
+    relevance_score: float | None = None
+    retry_count: int | None = None
 
 
 class IngestResponse(BaseModel):
@@ -123,6 +160,14 @@ class HealthResponse(BaseModel):
 # --- Endpoints ---
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest):
+    # Intent classification: skip RAG for greetings/chitchat
+    classifier = _get_intent_classifier()
+    if classifier:
+        intent = classifier.classify(req.question)
+        response = classifier.get_chitchat_response(intent)
+        if response:
+            return QueryResponse(answer=response, sources=[], session_id=req.session_id)
+
     try:
         qa = _get_qa()
     except FileNotFoundError:
@@ -132,8 +177,43 @@ def query(req: QueryRequest):
 
     chat_history = _get_session_history(req.session_id)
 
+    # Resolve follow-up questions into standalone queries
+    resolver = _get_query_resolver()
+    resolved_question = req.question
+    if resolver and chat_history:
+        resolved_question = resolver.resolve(req.question, chat_history)
+
     try:
-        result = qa.invoke({"question": req.question, "chat_history": chat_history})
+        # Check if using agent or chain
+        if ENABLE_SQL_AGENT and _agent is not None:
+            result = _agent.invoke(resolved_question, chat_history=chat_history)
+            answer = result.get("answer", "")
+            tool_used = result.get("tool_used")
+
+            if req.session_id is not None:
+                chat_history.append((req.question, answer))
+
+            return QueryResponse(
+                answer=answer, sources=[], session_id=req.session_id,
+                tool_used=tool_used,
+            )
+
+        # Relevance checking with retry
+        relevance_score = None
+        retry_count = None
+        if RELEVANCE_CHECK_ENABLED and _retriever is not None:
+            from relevance_checker import RelevanceChecker, retrieve_with_relevance_check
+            checker = RelevanceChecker(threshold=RELEVANCE_THRESHOLD)
+            _, rel_info = retrieve_with_relevance_check(
+                _retriever, resolved_question, checker,
+                max_retries=MAX_RETRIEVAL_RETRIES,
+            )
+            relevance_score = rel_info["score"]
+            retry_count = rel_info["retry_count"]
+            if rel_info["retry_count"] > 0:
+                resolved_question = rel_info["final_query"]
+
+        result = qa.invoke({"question": resolved_question, "chat_history": chat_history})
     except ConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
     except Exception as e:
@@ -153,18 +233,22 @@ def query(req: QueryRequest):
         if key not in seen:
             seen.add(key)
             sources.append(Source(file=src, page=page))
-    return QueryResponse(answer=result["answer"], sources=sources, session_id=req.session_id)
+    return QueryResponse(
+        answer=result["answer"], sources=sources, session_id=req.session_id,
+        relevance_score=relevance_score, retry_count=retry_count,
+    )
 
 
 @app.post("/ingest", response_model=IngestResponse)
 def ingest():
-    global _qa_chain, _retriever
+    global _qa_chain, _retriever, _agent
     try:
         from ingest import ingest as run_ingest
         run_ingest()
         # Reset cached chain so next query picks up new documents
         _qa_chain = None
         _retriever = None
+        _agent = None
         return IngestResponse(status="ok", detail="Ingestion complete")
     except ConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")

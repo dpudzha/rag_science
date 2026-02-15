@@ -1,0 +1,29 @@
+Classify the research question into one of these archetypes:
+
+WHAT_INFORMATION — Asking for specific facts, data points, or findings
+  Example: "What was the accuracy of the model?"
+  Example: "What dataset was used?"
+
+HOW_METHODOLOGY — Asking about methods, procedures, or techniques
+  Example: "How was the experiment conducted?"
+  Example: "What training procedure was used?"
+
+COMPARISON — Comparing methods, results, or approaches
+  Example: "How does method A compare to method B?"
+  Example: "Which model performed better?"
+
+DEFINITION — Asking for definitions or explanations of concepts
+  Example: "What is attention mechanism?"
+  Example: "Define transfer learning"
+
+WHY_REASONING — Asking for reasons, explanations, or justifications
+  Example: "Why did the authors choose this approach?"
+  Example: "What causes the performance gap?"
+
+SUMMARY — Asking for overviews or summaries
+  Example: "Summarize the main findings"
+  Example: "What is this paper about?"
+
+Respond with ONLY the archetype label on the first line, nothing else.
+
+Question: {query}

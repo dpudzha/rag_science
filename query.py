@@ -24,6 +24,16 @@ from config import (
     DENSE_WEIGHT,
     RERANK_MODEL,
     ENABLE_PARENT_RETRIEVAL,
+    INTENT_CLASSIFICATION_ENABLED,
+    ARCHETYPE_DETECTION_ENABLED,
+    QUERY_REFORMULATION_ENABLED,
+    METADATA_EXTRACTION_ENABLED,
+    QUERY_RESOLUTION_ENABLED,
+    RELEVANCE_CHECK_ENABLED,
+    RELEVANCE_THRESHOLD,
+    MAX_RETRIEVAL_RETRIES,
+    ENABLE_SQL_AGENT,
+    AGENT_MAX_ITERATIONS,
 )
 
 logger = logging.getLogger(__name__)
@@ -79,6 +89,7 @@ class HybridRetriever(BaseRetriever):
     bm25_docs: list[Document]
     cross_encoder: CrossEncoder
     parent_chunks: list[Document] | None = None
+    metadata_filters: dict | None = None
     k: int = TOP_K
     k_candidates: int = TOP_K_CANDIDATES
     bm25_weight: float = BM25_WEIGHT
@@ -133,6 +144,11 @@ class HybridRetriever(BaseRetriever):
         rerank_scores = self.cross_encoder.predict(pairs, show_progress_bar=False)
         reranked = sorted(zip(candidates, rerank_scores), key=lambda x: x[1], reverse=True)
         top_docs = [doc for doc, _ in reranked[:self.k]]
+
+        # Apply metadata filters if set
+        if self.metadata_filters:
+            from metadata_extractor import MetadataFilterApplier
+            top_docs = MetadataFilterApplier.apply(top_docs, self.metadata_filters)
 
         # If parent-document retrieval is enabled, expand child chunks to parent chunks
         if self.parent_chunks is not None:
@@ -221,6 +237,12 @@ def build_qa_chain(retriever: HybridRetriever):
     )
 
 
+def build_agent(retriever: HybridRetriever):
+    """Build a RAG agent with tool selection (RAG + optional SQL)."""
+    from agent import RAGAgent
+    return RAGAgent(retriever=retriever, max_iterations=AGENT_MAX_ITERATIONS)
+
+
 def print_result(result: dict):
     print(f"\nAnswer:\n{result['answer']}\n")
     seen = set()
@@ -236,6 +258,81 @@ def print_result(result: dict):
         print(f"Sources: {', '.join(pages)}")
 
 
+def _get_intent_classifier():
+    """Lazy-load intent classifier if enabled."""
+    if not INTENT_CLASSIFICATION_ENABLED:
+        return None
+    from intent_classifier import IntentClassifier
+    return IntentClassifier()
+
+
+def _get_archetype_detector():
+    """Lazy-load archetype detector if enabled."""
+    if not ARCHETYPE_DETECTION_ENABLED:
+        return None
+    from archetype_detector import ArchetypeDetector
+    return ArchetypeDetector()
+
+
+def _get_query_reformulator():
+    """Lazy-load query reformulator if enabled."""
+    if not QUERY_REFORMULATION_ENABLED:
+        return None
+    from archetype_detector import QueryReformulator
+    return QueryReformulator()
+
+
+def _get_query_resolver():
+    """Lazy-load query resolver if enabled."""
+    if not QUERY_RESOLUTION_ENABLED:
+        return None
+    from query_resolver import QueryResolver
+    return QueryResolver()
+
+
+def _get_metadata_extractor():
+    """Lazy-load metadata extractor if enabled."""
+    if not METADATA_EXTRACTION_ENABLED:
+        return None
+    from metadata_extractor import MetadataExtractor
+    return MetadataExtractor()
+
+
+def _get_relevance_checker():
+    """Lazy-load relevance checker if enabled."""
+    if not RELEVANCE_CHECK_ENABLED:
+        return None
+    from relevance_checker import RelevanceChecker
+    return RelevanceChecker(threshold=RELEVANCE_THRESHOLD)
+
+
+def preprocess_query(question: str, retriever: HybridRetriever,
+                     detector=None, reformulator=None,
+                     metadata_extractor=None) -> str:
+    """Apply archetype detection, query reformulation, and metadata extraction."""
+    archetype = None
+    if detector:
+        archetype = detector.detect(question)
+        bm25_w, dense_w = detector.get_weights(archetype)
+        retriever.bm25_weight = bm25_w
+        retriever.dense_weight = dense_w
+        logger.info("Adjusted weights: bm25=%.2f, dense=%.2f for archetype %s",
+                     bm25_w, dense_w, archetype)
+
+    if reformulator and archetype:
+        question = reformulator.reformulate(question, archetype)
+
+    # Extract metadata filters and set on retriever
+    if metadata_extractor:
+        metadata = metadata_extractor.extract(question)
+        if metadata_extractor.has_filters(metadata):
+            retriever.metadata_filters = metadata
+        else:
+            retriever.metadata_filters = None
+
+    return question
+
+
 def interactive():
     from health import check_ollama
     check_ollama()
@@ -244,6 +341,12 @@ def interactive():
     retriever = build_retriever(vectorstore)
     qa = build_qa_chain(retriever)
     chat_history = []
+    classifier = _get_intent_classifier()
+    detector = _get_archetype_detector()
+    reformulator = _get_query_reformulator()
+    meta_extractor = _get_metadata_extractor()
+    relevance_checker = _get_relevance_checker()
+    query_resolver = _get_query_resolver()
 
     print("RAG Science — ask questions about your papers (type 'quit' to exit)\n")
 
@@ -255,7 +358,35 @@ def interactive():
         if not question or question.lower() in ("quit", "exit", "q"):
             break
 
-        result = qa.invoke({"question": question, "chat_history": chat_history})
+        # Intent classification: skip RAG for greetings/chitchat
+        if classifier:
+            intent = classifier.classify(question)
+            response = classifier.get_chitchat_response(intent)
+            if response:
+                print(f"\n{response}\n")
+                continue
+
+        # Resolve follow-up questions into standalone queries
+        resolved_question = question
+        if query_resolver and chat_history:
+            resolved_question = query_resolver.resolve(question, chat_history)
+
+        # Archetype detection + query reformulation + metadata extraction
+        processed_question = preprocess_query(
+            resolved_question, retriever, detector, reformulator, meta_extractor
+        )
+
+        # Relevance checking with retry
+        if relevance_checker:
+            from relevance_checker import retrieve_with_relevance_check
+            docs, rel_info = retrieve_with_relevance_check(
+                retriever, processed_question, relevance_checker,
+                max_retries=MAX_RETRIEVAL_RETRIES,
+            )
+            if rel_info["retry_count"] > 0:
+                processed_question = rel_info["final_query"]
+
+        result = qa.invoke({"question": processed_question, "chat_history": chat_history})
         print_result(result)
         chat_history.append((question, result["answer"]))
 
@@ -264,10 +395,39 @@ def ask(question: str):
     from health import check_ollama
     check_ollama()
 
+    # Intent classification: skip RAG for greetings/chitchat
+    classifier = _get_intent_classifier()
+    if classifier:
+        intent = classifier.classify(question)
+        response = classifier.get_chitchat_response(intent)
+        if response:
+            print(f"\n{response}\n")
+            return
+
     vectorstore = load_vectorstore()
     retriever = build_retriever(vectorstore)
     qa = build_qa_chain(retriever)
-    result = qa.invoke({"question": question, "chat_history": []})
+
+    # Archetype detection + query reformulation + metadata extraction
+    detector = _get_archetype_detector()
+    reformulator = _get_query_reformulator()
+    meta_extractor = _get_metadata_extractor()
+    processed_question = preprocess_query(
+        question, retriever, detector, reformulator, meta_extractor
+    )
+
+    # Relevance checking with retry
+    relevance_checker = _get_relevance_checker()
+    if relevance_checker:
+        from relevance_checker import retrieve_with_relevance_check
+        docs, rel_info = retrieve_with_relevance_check(
+            retriever, processed_question, relevance_checker,
+            max_retries=MAX_RETRIEVAL_RETRIES,
+        )
+        if rel_info["retry_count"] > 0:
+            processed_question = rel_info["final_query"]
+
+    result = qa.invoke({"question": processed_question, "chat_history": []})
     print_result(result)
 
 

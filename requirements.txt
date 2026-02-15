@@ -10,3 +10,5 @@ sentence-transformers>=2.2.0
 fastapi
 uvicorn[standard]
 httpx
+python-docx
+openpyxl

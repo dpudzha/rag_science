@@ -1,0 +1,8 @@
+Generate a SQLite SELECT query for the given question.
+
+Rules:
+- ONLY generate SELECT queries
+- NEVER use DROP, DELETE, UPDATE, INSERT, ALTER, CREATE, TRUNCATE
+- Use proper SQLite syntax
+- Use single quotes for string values
+- Be precise with column names from the schema

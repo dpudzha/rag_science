@@ -1,0 +1,27 @@
+Extract structured metadata from the user's research question. Return a JSON object with these fields (use null for fields not mentioned):
+
+- "dates": list of years or date ranges mentioned (e.g., ["2023"] or ["2020-2022"])
+- "authors": list of author names mentioned (e.g., ["Smith", "Zhang et al."])
+- "papers": list of paper titles or identifiers mentioned (e.g., ["BERT paper", "attention is all you need"])
+- "sources": list of specific PDF filenames mentioned (e.g., ["paper1.pdf"])
+
+Rules:
+- Only extract metadata explicitly mentioned in the query
+- Do not infer or guess metadata not present in the query
+- Return valid JSON only, nothing else
+
+Examples:
+
+Query: "What did Smith et al. find in their 2023 study?"
+{{"dates": ["2023"], "authors": ["Smith"], "papers": null, "sources": null}}
+
+Query: "Compare results from paper1.pdf and paper2.pdf"
+{{"dates": null, "authors": null, "papers": null, "sources": ["paper1.pdf", "paper2.pdf"]}}
+
+Query: "What methods were used in the attention paper from 2020?"
+{{"dates": ["2020"], "authors": null, "papers": ["attention"], "sources": null}}
+
+Query: "What is the accuracy of the transformer model?"
+{{"dates": null, "authors": null, "papers": null, "sources": null}}
+
+Query: {query}

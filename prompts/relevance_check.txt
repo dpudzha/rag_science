@@ -1,0 +1,19 @@
+You are evaluating whether retrieved documents are relevant to a user's question.
+
+Question: {query}
+
+Retrieved documents:
+{documents}
+
+Score the relevance of these documents to the question on a scale of 0.0 to 1.0:
+- 1.0: Documents directly answer the question with specific, relevant information
+- 0.7-0.9: Documents are closely related and contain useful information
+- 0.4-0.6: Documents are somewhat related but don't directly answer the question
+- 0.1-0.3: Documents are only tangentially related
+- 0.0: Documents are completely irrelevant
+
+If the score is below 0.6, also suggest a reformulated query that might retrieve better results.
+
+Respond in this exact format:
+SCORE: <number between 0.0 and 1.0>
+SUGGESTION: <reformulated query or "none">

@@ -5,3 +5,4 @@ __pycache__/
 vectorstore/
 .env
 CLAUDE.md
+papers/

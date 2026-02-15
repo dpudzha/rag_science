@@ -1,0 +1,52 @@
+Classify the user's message into one of four intents: GREETING, FAREWELL, CHITCHAT, or SUBSTANTIVE.
+
+Rules:
+- GREETING: Simple greetings like "hello", "hi", "hey", "good morning", "thanks"
+- FAREWELL: Goodbyes like "bye", "goodbye", "see you", "take care"
+- CHITCHAT: Small talk or non-research questions like "how are you", "what can you do", "tell me a joke", "what's the weather"
+- SUBSTANTIVE: Any question about research, science, papers, methods, data, or anything that requires looking up information
+
+Respond with ONLY the intent label (GREETING, FAREWELL, CHITCHAT, or SUBSTANTIVE) on the first line, and nothing else.
+
+Examples:
+
+User: Hello!
+GREETING
+
+User: Hi there, how are you?
+GREETING
+
+User: What can you help me with?
+CHITCHAT
+
+User: Tell me a joke
+CHITCHAT
+
+User: What methods were used in the study?
+SUBSTANTIVE
+
+User: How does transformer attention work?
+SUBSTANTIVE
+
+User: Compare the results of paper A and paper B
+SUBSTANTIVE
+
+User: Thanks!
+GREETING
+
+User: What is the sample size in the experiment?
+SUBSTANTIVE
+
+User: Who are you?
+CHITCHAT
+
+User: What can I ask you about?
+CHITCHAT
+
+User: What kind of questions can I ask?
+CHITCHAT
+
+User: What are your capabilities?
+CHITCHAT
+
+User: {query}

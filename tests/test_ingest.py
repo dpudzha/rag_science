@@ -180,3 +180,56 @@ class TestDetectSectionHeader:
     def test_returns_none_for_no_header(self):
         from ingest import _detect_section_header
         assert _detect_section_header("just regular text here") is None
+
+
+class TestSaveLargeTablesToSql:
+    def test_returns_description_chunks(self, tmp_path):
+        from ingest import _save_large_tables_to_sql
+        large_tables = [{
+            "source": "data.xlsx",
+            "table": {
+                "data": [
+                    ["Name", "Value", "Category"],
+                    *([["item", "100", "A"]] * 105),
+                ],
+                "num_rows": 105,
+                "sheet_name": "Sheet1",
+            },
+        }]
+        with patch("sql_database.SQLDatabase") as MockDB:
+            MockDB.return_value = MagicMock()
+            chunks = _save_large_tables_to_sql(large_tables)
+
+        assert len(chunks) == 1
+        chunk = chunks[0]
+        assert "SQL Table" in chunk.page_content
+        assert "query_tables" in chunk.page_content
+        assert chunk.metadata["content_type"] == "sql_table_description"
+        assert chunk.metadata["source"] == "data.xlsx"
+
+    def test_empty_tables_returns_empty(self):
+        from ingest import _save_large_tables_to_sql
+        assert _save_large_tables_to_sql([]) == []
+
+    def test_description_includes_columns_and_sample(self, tmp_path):
+        from ingest import _save_large_tables_to_sql
+        large_tables = [{
+            "source": "report.xlsx",
+            "table": {
+                "data": [
+                    ["Year", "Revenue"],
+                    ["2020", "1M"],
+                    ["2021", "2M"],
+                    *([["2022", "3M"]] * 102),
+                ],
+                "num_rows": 104,
+            },
+        }]
+        with patch("sql_database.SQLDatabase") as MockDB:
+            MockDB.return_value = MagicMock()
+            chunks = _save_large_tables_to_sql(large_tables)
+
+        content = chunks[0].page_content
+        assert "Year" in content
+        assert "Revenue" in content
+        assert "2020" in content  # sample row

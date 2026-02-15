@@ -84,3 +84,20 @@ class TestHybridRetrieverDocKey:
         key = HybridRetriever._doc_key(doc)
         assert key.startswith("test.pdf:1:")
         assert len(key.split(":", 2)[2]) <= 200
+
+
+class TestRelevanceCheckerIntegration:
+    def test_get_relevance_checker_when_enabled(self):
+        with patch("query.RELEVANCE_CHECK_ENABLED", True), \
+             patch("query.RELEVANCE_THRESHOLD", 0.5), \
+             patch("relevance_checker.ChatOllama"):
+            from query import _get_relevance_checker
+            checker = _get_relevance_checker()
+            assert checker is not None
+            assert checker.threshold == 0.5
+
+    def test_get_relevance_checker_when_disabled(self):
+        with patch("query.RELEVANCE_CHECK_ENABLED", False):
+            from query import _get_relevance_checker
+            checker = _get_relevance_checker()
+            assert checker is None

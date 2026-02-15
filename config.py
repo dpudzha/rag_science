@@ -28,6 +28,33 @@ SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
 # CORS
 CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
 
+# Intent classification
+INTENT_CLASSIFICATION_ENABLED = os.getenv("INTENT_CLASSIFICATION_ENABLED", "true").lower() == "true"
+
+# Archetype detection and query reformulation
+ARCHETYPE_DETECTION_ENABLED = os.getenv("ARCHETYPE_DETECTION_ENABLED", "true").lower() == "true"
+QUERY_REFORMULATION_ENABLED = os.getenv("QUERY_REFORMULATION_ENABLED", "true").lower() == "true"
+QUERY_RESOLUTION_ENABLED = os.getenv("QUERY_RESOLUTION_ENABLED", "true").lower() == "true"
+DOMAIN_TERMINOLOGY_PATH = os.getenv("DOMAIN_TERMINOLOGY_PATH", "")
+
+# Metadata extraction
+METADATA_EXTRACTION_ENABLED = os.getenv("METADATA_EXTRACTION_ENABLED", "true").lower() == "true"
+
+# Relevance checking
+RELEVANCE_CHECK_ENABLED = os.getenv("RELEVANCE_CHECK_ENABLED", "true").lower() == "true"
+RELEVANCE_THRESHOLD = float(os.getenv("RELEVANCE_THRESHOLD", "0.6"))
+MAX_RETRIEVAL_RETRIES = int(os.getenv("MAX_RETRIEVAL_RETRIES", "1"))
+
+# Agent / SQL
+ENABLE_SQL_AGENT = os.getenv("ENABLE_SQL_AGENT", "false").lower() == "true"
+SQL_DATABASE_PATH = os.getenv("SQL_DATABASE_PATH", "")
+AGENT_MAX_ITERATIONS = int(os.getenv("AGENT_MAX_ITERATIONS", "5"))
+
+# Multi-format ingestion
+SUPPORTED_FORMATS = os.getenv("SUPPORTED_FORMATS", "pdf,docx,xlsx").split(",")
+ENABLE_TABLE_EXTRACTION = os.getenv("ENABLE_TABLE_EXTRACTION", "true").lower() == "true"
+LARGE_TABLE_THRESHOLD = int(os.getenv("LARGE_TABLE_THRESHOLD", "100"))
+
 # Parent document retrieval (Phase 3)
 ENABLE_PARENT_RETRIEVAL = os.getenv("ENABLE_PARENT_RETRIEVAL", "false").lower() == "true"
 CHILD_CHUNK_SIZE = int(os.getenv("CHILD_CHUNK_SIZE", "400"))

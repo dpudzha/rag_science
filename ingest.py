@@ -360,12 +360,18 @@ def chunk_documents(docs: list[dict]) -> list[Document]:
             prefix = " ".join(prefix_parts)
             enriched_content = f"{prefix}\n{chunk_text}" if prefix else chunk_text
 
+            # Compute stable chunk ID: source|page|sha256(normalized_text)[:12]
+            normalized = " ".join(enriched_content.split())
+            digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+            chunk_id = f"{doc['source']}|p{page}|{digest}"
+
             all_chunks.append(Document(
                 page_content=enriched_content,
                 metadata={
                     "source": doc["source"],
                     "page": page,
                     "title": title,
+                    "chunk_id": chunk_id,
                     **({"section": section} if section else {}),
                     **({"creation_date": doc["creation_date"]} if doc.get("creation_date") else {}),
                     **({"authors": doc["authors"]} if doc.get("authors") else {}),
@@ -383,13 +389,18 @@ def chunk_documents(docs: list[dict]) -> list[Document]:
                 for row in data[1:]:
                     row_str = " | ".join(row)
                     content = f"[Table from {doc['source']}]\nHeader: {header_str}\nRow: {row_str}"
+                    table_page = table.get("page", 1)
+                    normalized = " ".join(content.split())
+                    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:12]
+                    chunk_id = f"{doc['source']}|p{table_page}|{digest}"
                     all_chunks.append(Document(
                         page_content=content,
                         metadata={
                             "source": doc["source"],
-                            "page": table.get("page", 1),
+                            "page": table_page,
                             "title": doc.get("title", ""),
                             "content_type": "table_row",
+                            "chunk_id": chunk_id,
                         },
                     ))
 

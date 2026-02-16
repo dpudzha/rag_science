@@ -1,8 +1,10 @@
 import os
 
-PAPERS_DIR = os.getenv("PAPERS_DIR", "./papers")
-VECTORSTORE_DIR = os.getenv("VECTORSTORE_DIR", "./vectorstore")
-INGEST_RECORD = os.getenv("INGEST_RECORD", "./vectorstore/ingested.json")
+_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+PAPERS_DIR = os.getenv("PAPERS_DIR", os.path.join(_PROJECT_ROOT, "papers"))
+VECTORSTORE_DIR = os.getenv("VECTORSTORE_DIR", os.path.join(_PROJECT_ROOT, "vectorstore"))
+INGEST_RECORD = os.getenv("INGEST_RECORD", os.path.join(_PROJECT_ROOT, "vectorstore", "ingested.json"))
 
 CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "500"))
 CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "50"))

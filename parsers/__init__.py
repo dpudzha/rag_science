@@ -1,8 +1,13 @@
 """Document parsers for multiple file formats."""
 from pathlib import Path
+from typing import Protocol
 
 
-def get_parser(path: str):
+class Parser(Protocol):
+    def parse(self, path: str) -> dict: ...
+
+
+def get_parser(path: str) -> Parser:
     """Return the appropriate parser for a file based on its extension."""
     ext = Path(path).suffix.lower()
     if ext == ".pdf":

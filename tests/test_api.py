@@ -122,6 +122,29 @@ class TestSessionManagement:
         assert resp.status_code == 404
 
 
+class TestErrorResponses:
+    """Verify error responses don't leak internal details."""
+
+    def test_unexpected_error_hides_details(self, client):
+        mock_qa = MagicMock()
+        mock_qa.invoke.side_effect = RuntimeError("secret db password leaked")
+        with patch("api._get_qa", return_value=mock_qa):
+            resp = client.post("/query", json={"question": "test?"})
+        assert resp.status_code == 500
+        detail = resp.json()["detail"]
+        assert "secret" not in detail
+        assert "password" not in detail
+        assert "internal error" in detail.lower()
+
+    def test_ingest_error_hides_details(self, client):
+        with patch("ingest.ingest", side_effect=RuntimeError("disk path /secret/data")):
+            resp = client.post("/ingest")
+        assert resp.status_code == 500
+        detail = resp.json()["detail"]
+        assert "/secret" not in detail
+        assert "failed" in detail.lower()
+
+
 class TestIngestEndpoint:
     def test_ingest_success(self, client):
         with patch("ingest.ingest") as mock_run:

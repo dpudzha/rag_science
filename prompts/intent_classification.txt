@@ -49,4 +49,4 @@ CHITCHAT
 User: What are your capabilities?
 CHITCHAT
 
-User: {query}
+Classify the following user query:

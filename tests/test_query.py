@@ -86,11 +86,29 @@ class TestHybridRetrieverDocKey:
         assert len(key.split(":", 2)[2]) <= 200
 
 
+class TestPreloadedRetriever:
+    def test_returns_cached_docs(self):
+        from query import PreloadedRetriever
+        docs = [
+            Document(page_content="doc1", metadata={"source": "a.pdf"}),
+            Document(page_content="doc2", metadata={"source": "b.pdf"}),
+        ]
+        retriever = PreloadedRetriever(docs=docs)
+        result = retriever.invoke("any query")
+        assert result == docs
+
+    def test_ignores_query_text(self):
+        from query import PreloadedRetriever
+        docs = [Document(page_content="fixed", metadata={})]
+        retriever = PreloadedRetriever(docs=docs)
+        assert retriever.invoke("query A") == retriever.invoke("query B")
+
+
 class TestRelevanceCheckerIntegration:
     def test_get_relevance_checker_when_enabled(self):
         with patch("query.RELEVANCE_CHECK_ENABLED", True), \
              patch("query.RELEVANCE_THRESHOLD", 0.5), \
-             patch("relevance_checker.ChatOllama"):
+             patch("utils.get_default_llm"):
             from query import _get_relevance_checker
             checker = _get_relevance_checker()
             assert checker is not None

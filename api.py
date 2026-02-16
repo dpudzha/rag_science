@@ -67,6 +67,10 @@ def _get_query_resolver():
     return _query_resolver
 
 
+MAX_SESSIONS = 100
+MAX_HISTORY_LENGTH = 20
+
+
 def _get_session_history(session_id: str | None) -> list:
     """Get or create chat history for a session. Evicts expired sessions."""
     if session_id is None:
@@ -81,10 +85,21 @@ def _get_session_history(session_id: str | None) -> list:
         del _sessions[sid]
 
     if session_id not in _sessions:
+        if len(_sessions) >= MAX_SESSIONS:
+            # Evict oldest session
+            oldest = min(_sessions, key=lambda s: _sessions[s]["last_access"])
+            del _sessions[oldest]
         _sessions[session_id] = {"history": [], "last_access": now}
 
     _sessions[session_id]["last_access"] = now
-    return _sessions[session_id]["history"]
+    history = _sessions[session_id]["history"]
+
+    # Trim history to max length
+    if len(history) > MAX_HISTORY_LENGTH:
+        _sessions[session_id]["history"] = history[-MAX_HISTORY_LENGTH:]
+        history = _sessions[session_id]["history"]
+
+    return history
 
 
 # --- Lifespan: health check on startup ---
@@ -103,8 +118,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -198,27 +213,34 @@ def query(req: QueryRequest):
                 tool_used=tool_used,
             )
 
+        # Create per-request retriever copy for thread-safety
+        request_retriever = _retriever.model_copy() if _retriever is not None else None
+
         # Relevance checking with retry
         relevance_score = None
         retry_count = None
-        if RELEVANCE_CHECK_ENABLED and _retriever is not None:
+        if RELEVANCE_CHECK_ENABLED and request_retriever is not None:
             from relevance_checker import RelevanceChecker, retrieve_with_relevance_check
             checker = RelevanceChecker(threshold=RELEVANCE_THRESHOLD)
-            _, rel_info = retrieve_with_relevance_check(
-                _retriever, resolved_question, checker,
+            docs, rel_info = retrieve_with_relevance_check(
+                request_retriever, resolved_question, checker,
                 max_retries=MAX_RETRIEVAL_RETRIES,
             )
             relevance_score = rel_info["score"]
             retry_count = rel_info["retry_count"]
             if rel_info["retry_count"] > 0:
                 resolved_question = rel_info["final_query"]
-
-        result = qa.invoke({"question": resolved_question, "chat_history": chat_history})
+            # Use pre-retrieved docs directly — skip chain's internal retrieval
+            from query import PreloadedRetriever, build_qa_chain
+            qa_for_query = build_qa_chain(PreloadedRetriever(docs=docs))
+            result = qa_for_query.invoke({"question": resolved_question, "chat_history": chat_history})
+        else:
+            result = qa.invoke({"question": resolved_question, "chat_history": chat_history})
     except ConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
     except Exception as e:
         logger.exception("Unexpected error during query")
-        raise HTTPException(status_code=500, detail=f"Query failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
     # Update session history
     if req.session_id is not None:
@@ -254,7 +276,7 @@ def ingest():
         raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
     except Exception as e:
         logger.exception("Ingestion failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Ingestion failed. Check server logs.")
 
 
 @app.delete("/sessions/{session_id}")

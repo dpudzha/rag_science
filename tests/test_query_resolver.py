@@ -36,10 +36,11 @@ class TestQueryResolver:
         resolver.resolve("Follow up", history)
 
         call_args = mock_llm.invoke.call_args[0][0]
-        prompt_text = call_args[0].content
-        assert "First question" in prompt_text
-        assert "First answer" in prompt_text
-        assert "Follow up" in prompt_text
+        system_text = call_args[0].content
+        user_text = call_args[1].content
+        assert "First question" in system_text
+        assert "First answer" in system_text
+        assert "Follow up" == user_text
 
     def test_truncates_history_to_last_3(self):
         resolver, mock_llm = self._make_resolver("resolved")
@@ -79,7 +80,7 @@ class TestQueryResolutionConfig:
             assert _get_query_resolver() is None
 
     @patch("query.QUERY_RESOLUTION_ENABLED", True)
-    @patch("query_resolver.ChatOllama")
+    @patch("utils.get_default_llm")
     def test_enabled_returns_resolver(self, mock_ollama):
         from query import _get_query_resolver
         resolver = _get_query_resolver()

@@ -3,11 +3,10 @@ import logging
 import re
 from pathlib import Path
 
-from langchain_ollama import ChatOllama
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
-from config import OLLAMA_BASE_URL, LLM_MODEL
+from utils import get_default_llm
 
 logger = logging.getLogger(__name__)
 
@@ -21,10 +20,8 @@ _SUGGESTION_RE = re.compile(r"SUGGESTION:\s*(.+)", re.IGNORECASE)
 class RelevanceChecker:
     """Scores the relevance of retrieved documents against a query."""
 
-    def __init__(self, llm: ChatOllama | None = None, threshold: float = 0.6):
-        self._llm = llm or ChatOllama(
-            model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0
-        )
+    def __init__(self, llm=None, threshold: float = 0.6):
+        self._llm = llm or get_default_llm()
         self.threshold = threshold
 
     def check(self, query: str, docs: list[Document]) -> dict:
@@ -40,15 +37,16 @@ class RelevanceChecker:
         doc_texts = []
         for i, doc in enumerate(docs, 1):
             source = doc.metadata.get("source", "unknown")
-            doc_texts.append(f"[{i}] ({source}): {doc.page_content[:300]}")
+            doc_texts.append(f"[{i}] ({source}): {doc.page_content[:500]}")
         documents_str = "\n\n".join(doc_texts)
 
-        prompt = (_PROMPT_TEMPLATE
-                  .replace("{query}", query)
-                  .replace("{documents}", documents_str))
+        system_prompt = _PROMPT_TEMPLATE.replace("{documents}", documents_str)
 
         try:
-            response = self._llm.invoke([HumanMessage(content=prompt)])
+            response = self._llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=query),
+            ])
             text = response.content.strip()
 
             # Parse score

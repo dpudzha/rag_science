@@ -98,7 +98,7 @@ class TestFileHash:
         f = tmp_path / "test.txt"
         f.write_text("hello world")
         h = file_hash(str(f))
-        assert len(h) == 32  # MD5 hex digest length
+        assert len(h) == 64  # SHA-256 hex digest length
         assert all(c in "0123456789abcdef" for c in h)
 
     def test_different_content_different_hash(self, tmp_path):

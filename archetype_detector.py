@@ -1,12 +1,12 @@
 """Archetype detection and query reformulation for improved retrieval."""
 import json
 import logging
+import re
 from pathlib import Path
 
-from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
-from config import OLLAMA_BASE_URL, LLM_MODEL
+from utils import get_default_llm
 
 logger = logging.getLogger(__name__)
 
@@ -14,8 +14,14 @@ _ARCHETYPE_PROMPT_PATH = Path(__file__).parent / "prompts" / "archetype_detectio
 _REFORMULATION_PROMPT_PATH = Path(__file__).parent / "prompts" / "query_reformulation.txt"
 _DOMAIN_TERMINOLOGY_PATH = Path(__file__).parent / "domain_terminology.json"
 
+_COMBINED_PROMPT_PATH = Path(__file__).parent / "prompts" / "archetype_and_reformulation.txt"
+
 _ARCHETYPE_PROMPT = _ARCHETYPE_PROMPT_PATH.read_text()
 _REFORMULATION_PROMPT = _REFORMULATION_PROMPT_PATH.read_text()
+_COMBINED_PROMPT = _COMBINED_PROMPT_PATH.read_text()
+
+_ARCHETYPE_RE = re.compile(r"ARCHETYPE:\s*(\S+)")
+_QUERY_RE = re.compile(r"QUERY:\s*(.+)", re.DOTALL)
 
 ARCHETYPES = {
     "WHAT_INFORMATION",
@@ -53,16 +59,16 @@ def _load_domain_terminology(path: Path | None = None) -> dict:
 class ArchetypeDetector:
     """Detects the archetype of a research query using an LLM."""
 
-    def __init__(self, llm: ChatOllama | None = None):
-        self._llm = llm or ChatOllama(
-            model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0
-        )
+    def __init__(self, llm=None):
+        self._llm = llm or get_default_llm()
 
     def detect(self, query: str) -> str:
         """Return the archetype label for a query. Falls back to WHAT_INFORMATION."""
-        prompt = _ARCHETYPE_PROMPT.replace("{query}", query)
         try:
-            response = self._llm.invoke([HumanMessage(content=prompt)])
+            response = self._llm.invoke([
+                SystemMessage(content=_ARCHETYPE_PROMPT),
+                HumanMessage(content=query),
+            ])
             archetype = response.content.strip().split("\n")[0].strip().upper()
             if archetype in ARCHETYPES:
                 logger.info("Archetype: %s for query: %s", archetype, query[:80])
@@ -73,6 +79,40 @@ class ArchetypeDetector:
             logger.warning("Archetype detection failed (%s), falling back to WHAT_INFORMATION", e)
             return "WHAT_INFORMATION"
 
+    def detect_and_reformulate(self, query: str, domain_terms: dict) -> tuple[str, str]:
+        """Detect archetype and reformulate in a single LLM call.
+
+        Returns (archetype, reformulated_query).
+        """
+        terms_str = "none"
+        if domain_terms:
+            abbrevs = domain_terms.get("abbreviations", {})
+            relevant = {k: v for k, v in abbrevs.items() if k.lower() in query.lower()}
+            if relevant:
+                terms_str = ", ".join(f"{k} = {v}" for k, v in relevant.items())
+
+        system_prompt = _COMBINED_PROMPT.replace("{domain_terms}", terms_str)
+        try:
+            response = self._llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=query),
+            ])
+            text = response.content.strip()
+
+            arch_match = _ARCHETYPE_RE.search(text)
+            archetype = arch_match.group(1).upper() if arch_match else "WHAT_INFORMATION"
+            if archetype not in ARCHETYPES:
+                archetype = "WHAT_INFORMATION"
+
+            query_match = _QUERY_RE.search(text)
+            reformulated = query_match.group(1).strip() if query_match else query
+
+            logger.info("Combined: archetype=%s, reformulated='%s'", archetype, reformulated[:60])
+            return archetype, reformulated
+        except Exception as e:
+            logger.warning("Combined detect+reformulate failed (%s), using defaults", e)
+            return "WHAT_INFORMATION", query
+
     def get_weights(self, archetype: str) -> tuple[float, float]:
         """Return (bm25_weight, dense_weight) for an archetype."""
         return ARCHETYPE_WEIGHTS.get(archetype, DEFAULT_WEIGHTS)
@@ -81,10 +121,8 @@ class ArchetypeDetector:
 class QueryReformulator:
     """Rewrites queries using archetype context and domain terminology."""
 
-    def __init__(self, llm: ChatOllama | None = None, terminology_path: Path | None = None):
-        self._llm = llm or ChatOllama(
-            model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0
-        )
+    def __init__(self, llm=None, terminology_path: Path | None = None):
+        self._llm = llm or get_default_llm()
         self._terminology = _load_domain_terminology(terminology_path)
 
     def reformulate(self, query: str, archetype: str) -> str:
@@ -97,12 +135,14 @@ class QueryReformulator:
             if relevant:
                 domain_terms = ", ".join(f"{k} = {v}" for k, v in relevant.items())
 
-        prompt = (_REFORMULATION_PROMPT
-                  .replace("{query}", query)
-                  .replace("{archetype}", archetype)
-                  .replace("{domain_terms}", domain_terms or "none"))
+        system_prompt = (_REFORMULATION_PROMPT
+                         .replace("{archetype}", archetype)
+                         .replace("{domain_terms}", domain_terms or "none"))
         try:
-            response = self._llm.invoke([HumanMessage(content=prompt)])
+            response = self._llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=query),
+            ])
             reformulated = response.content.strip()
             if reformulated:
                 logger.info("Reformulated: '%s' -> '%s'", query[:60], reformulated[:60])

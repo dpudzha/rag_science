@@ -2,10 +2,9 @@
 import logging
 from pathlib import Path
 
-from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
-from config import OLLAMA_BASE_URL, LLM_MODEL
+from utils import get_default_llm
 
 logger = logging.getLogger(__name__)
 
@@ -16,10 +15,8 @@ _PROMPT_TEMPLATE = _PROMPT_PATH.read_text()
 class QueryResolver:
     """Rewrites follow-up questions as standalone queries using chat history."""
 
-    def __init__(self, llm: ChatOllama | None = None):
-        self._llm = llm or ChatOllama(
-            model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0
-        )
+    def __init__(self, llm=None):
+        self._llm = llm or get_default_llm()
 
     def resolve(self, question: str, chat_history: list[tuple[str, str]]) -> str:
         """Resolve a follow-up into a standalone question.
@@ -39,11 +36,12 @@ class QueryResolver:
             f"User: {q}\nAssistant: {a}" for q, a in chat_history[-3:]
         )
 
-        prompt = (_PROMPT_TEMPLATE
-                  .replace("{chat_history}", history_text)
-                  .replace("{question}", question))
+        system_prompt = _PROMPT_TEMPLATE.replace("{chat_history}", history_text)
         try:
-            response = self._llm.invoke([HumanMessage(content=prompt)])
+            response = self._llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=question),
+            ])
             resolved = response.content.strip()
             if resolved:
                 logger.info("Resolved: '%s' -> '%s'", question[:60], resolved[:60])

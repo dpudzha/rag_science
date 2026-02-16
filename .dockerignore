@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+vectorstore/
+.env
+.git/
+.github/
+*.md
+!requirements*.txt
+experiments/
+tests/
+CLAUDE.md

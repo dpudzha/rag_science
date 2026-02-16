@@ -26,4 +26,4 @@ SUMMARY — Asking for overviews or summaries
 
 Respond with ONLY the archetype label on the first line, nothing else.
 
-Question: {query}
+Classify the following user question:

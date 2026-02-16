@@ -9,7 +9,6 @@ import re
 import shutil
 import tempfile
 
-import fitz
 from pathlib import Path
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -33,20 +32,25 @@ from config import (
     LARGE_TABLE_THRESHOLD,
 )
 
+from parsers.pdf_parser import extract_text_from_pdf, _extract_title  # noqa: F401
+
+try:
+    from utils import tokenize
+except ImportError:
+    _TOKEN_RE = re.compile(r"[a-z0-9]+")
+
+    def tokenize(text: str) -> list[str]:
+        return _TOKEN_RE.findall(text.lower())
+
 logger = logging.getLogger(__name__)
 
-_TOKEN_RE = re.compile(r"[a-z0-9]+")
 _SECTION_HEADER_RE = re.compile(
     r"^(?:\d+\.[\d.]*\s+[A-Z][^\n]*|[A-Z][A-Z\s]{3,})$", re.MULTILINE
 )
 
 
-def tokenize(text: str) -> list[str]:
-    return _TOKEN_RE.findall(text.lower())
-
-
 def file_hash(path: str) -> str:
-    return hashlib.md5(Path(path).read_bytes()).hexdigest()
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def load_ingest_record() -> dict:
@@ -60,42 +64,6 @@ def save_ingest_record(record: dict):
     Path(INGEST_RECORD).write_text(json.dumps(record, indent=2))
 
 
-def extract_text_from_pdf(pdf_path: str) -> dict:
-    pages = []
-    title = None
-    creation_date = None
-    authors = None
-    with fitz.open(pdf_path) as doc:
-        # Extract PDF metadata
-        pdf_meta = doc.metadata
-        if pdf_meta:
-            creation_date = pdf_meta.get("creationDate", "")
-            authors = pdf_meta.get("author", "")
-
-        for page_num, page in enumerate(doc, start=1):
-            text = page.get_text("text")
-            if text.strip():
-                pages.append({"text": text, "page": page_num})
-                if title is None:
-                    title = _extract_title(text)
-    return {
-        "pages": pages,
-        "source": Path(pdf_path).name,
-        "title": title or Path(pdf_path).stem,
-        "creation_date": creation_date or "",
-        "authors": authors or "",
-    }
-
-
-def _extract_title(first_page_text: str) -> str | None:
-    """Extract paper title from the first page (first non-empty line, heuristic)."""
-    for line in first_page_text.split("\n"):
-        line = line.strip()
-        if len(line) > 10 and not line.startswith("http"):
-            return line
-    return None
-
-
 def _detect_section_header(text: str) -> str | None:
     """Return the last section header found before this chunk, if any."""
     match = None
@@ -104,29 +72,6 @@ def _detect_section_header(text: str) -> str | None:
     if match:
         return match.group(0).strip()
     return None
-
-
-def load_new_pdfs(folder: str) -> list[dict]:
-    pdfs = list(Path(folder).rglob("*.pdf"))
-    record = load_ingest_record()
-    logger.info("Found %d PDFs total", len(pdfs))
-
-    docs = []
-    for pdf_path in pdfs:
-        h = file_hash(str(pdf_path))
-        if h in record:
-            logger.info("  - %s (already ingested, skipping)", pdf_path.name)
-            continue
-        try:
-            doc = extract_text_from_pdf(str(pdf_path))
-            doc["hash"] = h
-            docs.append(doc)
-            logger.info("  + %s (new)", doc["source"])
-        except Exception as e:
-            logger.warning("  ! %s: %s", pdf_path.name, e)
-
-    logger.info("%d new PDFs to ingest", len(docs))
-    return docs
 
 
 def load_new_documents(folder: str) -> tuple[list[dict], list[dict]]:

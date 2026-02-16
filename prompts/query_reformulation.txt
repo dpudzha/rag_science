@@ -27,6 +27,4 @@ Reformulated: "What accuracy results and performance measurements were reported 
 Original (COMPARISON): "Is CNN better than RNN?"
 Reformulated: "How does CNN performance compare to RNN in terms of relative accuracy and results?"
 
-Original question: {query}
-
-Reformulated query:
+The user's original question follows. Output ONLY the reformulated query:

@@ -3,8 +3,6 @@ You are a conversational query resolver. Given the conversation history and a fo
 Conversation history:
 {chat_history}
 
-Follow-up question: {question}
-
 Rules:
 - If the follow-up is already a standalone question, return it unchanged
 - Merge context from the conversation history into the follow-up to make it self-contained
@@ -12,4 +10,4 @@ Rules:
 - Do NOT answer the question — only rewrite it
 - Output ONLY the resolved question as a single sentence, nothing else
 
-Resolved question:
+The user's follow-up question follows. Output ONLY the resolved question:

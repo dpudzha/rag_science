@@ -1,6 +1,6 @@
 """RAG tool wrapping the existing HybridRetriever for agent use."""
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 from langchain_core.tools import BaseTool
 from langchain_core.callbacks import CallbackManagerForToolRun
@@ -17,7 +17,7 @@ class RAGTool(BaseTool):
         "about research papers, methods, results, and findings. Input should be a "
         "research question or search query."
     )
-    retriever: object  # HybridRetriever
+    retriever: Any  # HybridRetriever (can't import due to circular dep)
 
     model_config = {"arbitrary_types_allowed": True}
 

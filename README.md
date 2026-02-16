@@ -54,7 +54,7 @@ flowchart TD
 PDF/DOCX/XLSX → markdown + chunk + embed → FAISS + BM25 indexes → hybrid retrieval → cross-encoder rerank → LLM/agent answer
 ```
 
-1. **Ingest** — PDF/DOCX/XLSX files are normalized to markdown, split into overlapping chunks (max 1200 tokens) with metadata (title, section, page). Chunks are embedded and stored in a FAISS vector index. A BM25 keyword index is built in parallel.
+1. **Ingest** — PDF/DOCX/XLSX files are normalized to markdown, split into overlapping chunks (max 500 tokens) with metadata (title, section, page). Chunks are embedded and stored in a FAISS vector index. A BM25 keyword index is built in parallel.
 2. **Retrieve** — Queries run against both FAISS (semantic) and BM25 (keyword). Scores are fused, then a cross-encoder reranks the top candidates.
 3. **Answer** — The best chunks are passed to an LLM with a citation-focused prompt. Sources are returned with each answer.
 
@@ -160,7 +160,7 @@ All settings are configurable via environment variables. Copy `.env.example` to 
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
 | `LLM_MODEL` | `llama3.1:8b` | LLM model for answering |
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model |
-| `CHUNK_SIZE` | `1200` | Tokens per chunk |
+| `CHUNK_SIZE` | `500` | Tokens per chunk |
 | `TOP_K` | `4` | Final results returned |
 | `TOP_K_CANDIDATES` | `50` | Candidates before reranking |
 | `BM25_WEIGHT` | `0.3` | Keyword retrieval weight |
@@ -180,13 +180,40 @@ pytest tests/ -v
 
 ## Evaluation
 
-Define test queries in `eval/queries.json` and run:
+Curate your golden set in `eval/golden_dataset.json` and run:
 
 ```bash
 python eval/evaluate.py
 ```
 
-Reports Mean Reciprocal Rank (MRR) and Recall@K.
+Reports source-level Mean Reciprocal Rank (MRR) and Recall@K.
+
+You can also add optional chunk-level labels per query:
+
+```json
+{
+  "question": "What model architecture was used in the study?",
+  "expected_sources": ["paper1.pdf"],
+  "expected_chunk_ids": ["paper1.pdf|p3|0a1b2c3d4e5f"]
+}
+```
+
+When `expected_chunk_ids` are present, the evaluator also reports:
+- chunk MRR
+- chunk Precision@K
+- chunk Recall@K
+
+Chunk IDs are computed as:
+`{source}|p{page}|{sha256(normalized_chunk_text)[:12]}`
+
+To auto-generate `expected_chunk_ids` from existing `expected_sources`/`expected_pages`:
+
+```bash
+.venv/bin/python eval/generate_chunk_labels.py \
+  --input eval/golden_dataset.json \
+  --output eval/golden_dataset.json \
+  --bm25 vectorstore/bm25_index.pkl
+```
 
 ## Project Structure
 

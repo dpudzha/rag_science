@@ -1,6 +1,7 @@
 """Experiment orchestration for RAG pipeline parameter sweeps."""
 import json
 import logging
+import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -8,13 +9,24 @@ from typing import Any
 
 import pandas as pd
 
+ROOT_DIR = Path(__file__).resolve().parents[1]
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
 logger = logging.getLogger(__name__)
 
 GOLDEN_DATASET_PATH = Path(__file__).parent / "golden_dataset.json"
 
 
 def load_golden_dataset(path: Path = GOLDEN_DATASET_PATH) -> list[dict]:
-    """Load golden Q&A dataset from JSON file."""
+    """Load golden Q&A dataset from JSON file.
+
+    Each row typically includes:
+    - question
+    - ideal_answer (for answer-level metrics)
+    - expected_sources (source-level retrieval labels)
+    - expected_chunk_ids (optional chunk-level retrieval labels)
+    """
     return json.loads(path.read_text())
 
 
@@ -128,11 +140,22 @@ def run_experiment(
         qa = query_mod.build_qa_chain(retriever)
 
         # Run evaluation
-        from eval.evaluate import reciprocal_rank, recall_at_k
+        from eval.evaluate import (
+            reciprocal_rank,
+            recall_at_k,
+            reciprocal_rank_chunks,
+            precision_at_k_chunks,
+            recall_at_k_chunks,
+            extract_retrieved_chunk_ids,
+        )
 
         per_question = []
         mrr_sum = 0.0
         recall_sum = 0.0
+        chunk_mrr_sum = 0.0
+        chunk_precision_sum = 0.0
+        chunk_recall_sum = 0.0
+        chunk_labeled_n = 0
         questions_list = []
         answers_list = []
         contexts_list = []
@@ -141,6 +164,7 @@ def run_experiment(
         for item in golden_dataset:
             question = item["question"]
             expected = item.get("expected_sources", [])
+            expected_chunk_ids = item.get("expected_chunk_ids", [])
             ideal = item.get("ideal_answer", "")
 
             result = qa.invoke({"question": question, "chat_history": []})
@@ -149,6 +173,7 @@ def run_experiment(
 
             mrr = reciprocal_rank(expected, source_docs)
             recall = recall_at_k(expected, source_docs, retriever.k)
+            retrieved_chunk_ids = extract_retrieved_chunk_ids(source_docs)
 
             mrr_sum += mrr
             recall_sum += recall
@@ -159,7 +184,23 @@ def run_experiment(
                 "mrr": mrr,
                 f"recall@{retriever.k}": recall,
                 "sources": [d.metadata.get("source", "?") for d in source_docs],
+                "retrieved_chunk_ids": retrieved_chunk_ids,
             }
+
+            if expected_chunk_ids:
+                chunk_labeled_n += 1
+                chunk_mrr = reciprocal_rank_chunks(expected_chunk_ids, source_docs)
+                chunk_precision = precision_at_k_chunks(expected_chunk_ids, source_docs, retriever.k)
+                chunk_recall = recall_at_k_chunks(expected_chunk_ids, source_docs, retriever.k)
+
+                chunk_mrr_sum += chunk_mrr
+                chunk_precision_sum += chunk_precision
+                chunk_recall_sum += chunk_recall
+
+                per_q["chunk_mrr"] = chunk_mrr
+                per_q[f"chunk_precision@{retriever.k}"] = chunk_precision
+                per_q[f"chunk_recall@{retriever.k}"] = chunk_recall
+
             per_question.append(per_q)
 
             # Collect data for RAGAS
@@ -173,6 +214,11 @@ def run_experiment(
             "mrr": mrr_sum / n if n else 0,
             f"recall@{retriever.k}": recall_sum / n if n else 0,
         }
+        if chunk_labeled_n:
+            metrics["chunk_mrr"] = chunk_mrr_sum / chunk_labeled_n
+            metrics[f"chunk_precision@{retriever.k}"] = chunk_precision_sum / chunk_labeled_n
+            metrics[f"chunk_recall@{retriever.k}"] = chunk_recall_sum / chunk_labeled_n
+            metrics["chunk_labeled_queries"] = chunk_labeled_n
 
         # Optionally compute RAGAS metrics
         if compute_ragas:

@@ -406,11 +406,17 @@ def interactive():
             )
             if rel_info["retry_count"] > 0:
                 processed_question = rel_info["final_query"]
+            # Use PreloadedRetriever to avoid double-retrieval in QA chain
+            if qa is not None:
+                qa.retriever = PreloadedRetriever(docs=docs)
 
         if agent is not None:
             result = agent.invoke(processed_question, chat_history=chat_history)
         else:
             result = qa.invoke({"question": processed_question, "chat_history": chat_history})
+        # Restore original retriever for subsequent queries
+        if relevance_checker and qa is not None:
+            qa.retriever = retriever
         print_result(result)
         chat_history.append((question, result["answer"]))
 
@@ -451,6 +457,9 @@ def ask(question: str):
         )
         if rel_info["retry_count"] > 0:
             processed_question = rel_info["final_query"]
+        # Use PreloadedRetriever to avoid double-retrieval in QA chain
+        if qa is not None:
+            qa.retriever = PreloadedRetriever(docs=docs)
 
     if agent is not None:
         result = agent.invoke(processed_question, chat_history=[])

@@ -341,11 +341,14 @@ def chunk_documents(docs: list[dict]) -> list[Document]:
                 offset = full_text.find(chunk_text)
             if offset != -1:
                 search_start = offset + 1
-
-            page = _page_at_offset(page_offsets, page_numbers, max(0, offset))
+                page = _page_at_offset(page_offsets, page_numbers, offset)
+            else:
+                # Chunk text not found in full_text; use last known page
+                # instead of incorrectly defaulting to page 1.
+                page = page_numbers[-1] if page_numbers else 1
 
             # Detect section header from text preceding this chunk
-            preceding_text = full_text[max(0, offset - 500):max(0, offset)]
+            preceding_text = full_text[max(0, offset - 500):max(0, offset)] if offset >= 0 else ""
             section = _detect_section_header(preceding_text)
 
             # Build enriched content with title/section prefix
@@ -439,11 +442,32 @@ def save_bm25(bm25: BM25Okapi, docs: list[Document], directory: str):
     logger.info("BM25 index saved to %s", bm25_path)
 
 
+# nomic-embed-text context is 2048 BPE tokens.  CHUNK_SIZE=500 keeps the
+# vast majority of chunks within this limit.  As a safety net for rare
+# outliers (e.g. table-heavy content), we truncate at the embedding stage.
+# Full chunk text is still stored in FAISS for retrieval.
+_EMBED_CHAR_LIMIT = 3500
+
+
 def build_vectorstore(chunks, existing_store=None) -> FAISS | None:
     if not chunks:
         return existing_store
     embeddings = get_embeddings()
-    new_store = FAISS.from_documents(chunks, embeddings)
+
+    # Truncate oversized text for embedding while keeping full content
+    # in the stored Document.  Use batch embed_documents() to avoid
+    # per-chunk HTTP overhead against Ollama.
+    embed_texts = [chunk.page_content[:_EMBED_CHAR_LIMIT] for chunk in chunks]
+    texts = [chunk.page_content for chunk in chunks]
+    metadatas = [chunk.metadata for chunk in chunks]
+
+    logger.info("Embedding %d chunks in batch…", len(chunks))
+    vectors = embeddings.embed_documents(embed_texts)
+
+    text_embedding_pairs = list(zip(texts, vectors))
+    new_store = FAISS.from_embeddings(
+        text_embedding_pairs, embeddings, metadatas=metadatas
+    )
     if existing_store:
         existing_store.merge_from(new_store)
         return existing_store

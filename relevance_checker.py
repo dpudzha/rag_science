@@ -85,6 +85,8 @@ def retrieve_with_relevance_check(retriever, query: str, checker: RelevanceCheck
     """
     current_query = query
     retry_count = 0
+    docs = []
+    result = {"score": 0.0, "is_relevant": False, "suggestion": None}
 
     for attempt in range(1 + max_retries):
         docs = retriever.invoke(current_query)

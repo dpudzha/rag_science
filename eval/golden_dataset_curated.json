@@ -49,9 +49,9 @@
       2
     ],
     "expected_chunk_ids": [
-      "6_ATLAS ITk pixel detector overview.pdf|p1|52a769a21d8c",
-      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|01aaddb97acc",
-      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|7195f0fff9ef"
+      "4_ATL-ITK-PROC-2022-014.pdf|p2|a178dd69c15b",
+      "6_ATLAS ITk pixel detector overview.pdf|p3|758ec4e26bef",
+      "6_ATLAS ITk pixel detector overview.pdf|p2|ce60c729b26f"
     ]
   },
   {
@@ -68,9 +68,8 @@
       3
     ],
     "expected_chunk_ids": [
-      "2502.05097v1.pdf|p2|dc807300811f",
-      "2502.05097v1.pdf|p2|9c1b459136ea",
-      "6_ATLAS ITk pixel detector overview.pdf|p3|99126c202a5f"
+      "2502.05097v1.pdf|p3|5d7c35167eac",
+      "2502.05097v1.pdf|p3|6dd11625f980"
     ]
   },
   {
@@ -122,9 +121,9 @@
       5
     ],
     "expected_chunk_ids": [
-      "6_ATLAS ITk pixel detector overview.pdf|p1|52a769a21d8c",
-      "introduction_guide.pdf|p6|a2688b9b1039",
-      "2502.05097v1.pdf|p2|9c1b459136ea"
+      "introduction_guide.pdf|p46|31250521a0ab",
+      "6_ATLAS ITk pixel detector overview.pdf|p2|8a9b49073f4a",
+      "4_20230905_TIPP2023.pdf|p1|ed28b6b14fbf"
     ]
   },
   {
@@ -160,9 +159,9 @@
       8
     ],
     "expected_chunk_ids": [
-      "6_ATLAS ITk pixel detector overview.pdf|p2|ce60c729b26f",
-      "6_ATLAS ITk pixel detector overview.pdf|p2|8a9b49073f4a",
-      "1_ATLAS ITk Pixel Detector Overview.pdf|p4|a18882d2a7db"
+      "6_ATLAS ITk pixel detector overview.pdf|p3|4ed347f2b1b2",
+      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|7195f0fff9ef",
+      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|01aaddb97acc"
     ]
   },
   {
@@ -195,9 +194,9 @@
       2
     ],
     "expected_chunk_ids": [
-      "introduction_guide.pdf|p6|a2688b9b1039",
-      "introduction_guide.pdf|p6|4e2c8805aea5",
-      "introduction_guide.pdf|p6|b0b703129bb2"
+      "rd53cATLAS1v92.pdf|p7|df580d78104b",
+      "rd53cATLAS1v92.pdf|p5|1a4eda9e5f8e",
+      "1_ATLAS ITk Pixel Detector Overview.pdf|p3|175a786d050a"
     ]
   },
   {
@@ -206,7 +205,8 @@
     "expected_sources": [
       "2502.05097v1.pdf",
       "1_ATLAS ITk Pixel Detector Overview.pdf",
-      "4_20230905_TIPP2023.pdf"
+      "4_20230905_TIPP2023.pdf",
+      "Göttingen_RD53B_Seminar_06-21.pdf"
     ],
     "expected_pages": [
       1,
@@ -214,9 +214,9 @@
       2
     ],
     "expected_chunk_ids": [
-      "2502.05097v1.pdf|p1|c38f6b91afc7",
-      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|7195f0fff9ef",
-      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|01aaddb97acc"
+      "Göttingen_RD53B_Seminar_06-21.pdf|p4|8b6e71342052",
+      "1_ATLAS ITk Pixel Detector Overview.pdf|p1|4b6841013dba",
+      "6_ATLAS ITk pixel detector overview.pdf|p2|8a9b49073f4a"
     ]
   },
   {
@@ -277,8 +277,8 @@
       7
     ],
     "expected_chunk_ids": [
-      "introduction_guide.pdf|p8|00019ba87947",
-      "introduction_guide.pdf|p8|6cb8851431fd"
+      "introduction_guide.pdf|p27|df00442c8402",
+      "Loddo_PSD13.pdf|p29|d80d033070a2"
     ]
   },
   {
@@ -304,13 +304,15 @@
     "question": "What monitoring capabilities does the MOPS chip provide for the ITk Pixel Optoboard system?",
     "ideal_answer": "The MOPS chip monitors all bPOL output voltages (5x 2.5V and 8x 1.2V), output currents of bPOL2V5 chips (8 signals), temperature on Optoboards and Powerboard (8+1 signals), and PTAT output of two bPOL12V chips. Up to four MOPS chips can be connected to one CAN bus, with MOPS independently supplied at 1.6V via an integrated cable.",
     "expected_sources": [
-      "2_AT2_IP_MG_0010_v2.7.pdf"
+      "2_AT2_IP_MG_0010_v2.7.pdf",
+      "3_Optosystem status - Bern ATLAS Team.pdf"
     ],
     "expected_pages": [
       6
     ],
     "expected_chunk_ids": [
-      "2_AT2_IP_MG_0010_v2.7.pdf|p6|2ee52deb89d5"
+      "3_Optosystem status - Bern ATLAS Team.pdf|p14|94fbe37f56d8",
+      "2_AT2_IP_MG_0010_v2.7.pdf|p10|54e62ea771d1"
     ]
   },
   {
@@ -333,16 +335,17 @@
     "question": "What module assembly precision is required for the ITk pixel detector?",
     "ideal_answer": "Module attachment precision must be within plus or minus 50 micrometers in x and y dimensions, with a glue height of 40 plus or minus 15 micrometers. Flex-to-bare-module positioning also requires plus or minus 50 micrometer precision. Wire bond quality is verified through 32 pull tests per module (8 per chip).",
     "expected_sources": [
-      "Möbius_2022_J._Inst._17_C03042.pdf"
+      "Möbius_2022_J._Inst._17_C03042.pdf",
+      "5_ATL-ITK-SLIDE-2024-008.pdf"
     ],
     "expected_pages": [
       5,
       6
     ],
     "expected_chunk_ids": [
+      "5_ATL-ITK-SLIDE-2024-008.pdf|p10|63d4eaa0f59f",
       "Möbius_2022_J._Inst._17_C03042.pdf|p7|cab9f5e84f82",
-      "Möbius_2022_J._Inst._17_C03042.pdf|p3|7199f98608ee",
-      "Möbius_2022_J._Inst._17_C03042.pdf|p7|4200087b2ed8"
+      "Möbius_2022_J._Inst._17_C03042.pdf|p3|7199f98608ee"
     ]
   },
   {
@@ -393,15 +396,17 @@
     "question": "How many pixel modules are planned for the outer and inner systems of the ITk detector?",
     "ideal_answer": "The outer system uses 6816 planar quad modules with 150 micrometer thick sensors and 50x50 micrometer pixels, producing approximately 11,000 modules including yield. The inner system Layer 0 uses 1188 3D single modules (25x100 micrometer for flat, 50x50 micrometer for endcap), and Layer 1 uses 1200 planar quad modules with 100 micrometer thick sensors, producing approximately 2000 modules of each type including yield.",
     "expected_sources": [
-      "4_20230905_TIPP2023.pdf"
+      "4_20230905_TIPP2023.pdf",
+      "4_ATL-ITK-PROC-2022-014.pdf",
+      "6_ATLAS ITk pixel detector overview.pdf"
     ],
     "expected_pages": [
       8
     ],
     "expected_chunk_ids": [
-      "4_20230905_TIPP2023.pdf|p6|19b5dc33d191",
-      "4_20230905_TIPP2023.pdf|p12|ef65b99dd99b",
-      "4_20230905_TIPP2023.pdf|p1|ed28b6b14fbf"
+      "4_ATL-ITK-PROC-2022-014.pdf|p2|e01cbea647cc",
+      "4_ATL-ITK-PROC-2022-014.pdf|p3|223fec8d6009",
+      "6_ATLAS ITk pixel detector overview.pdf|p2|ce60c729b26f"
     ]
   },
   {

@@ -150,22 +150,23 @@ def _extract_sources_from_result(result: dict | None) -> list["Source"]:
     return sources
 
 
-def _apply_query_preprocessing(question: str) -> str:
-    """Run query preprocessing with the shared retriever when available."""
-    if _retriever is None:
+def _apply_query_preprocessing(question: str, retriever=None) -> str:
+    """Run query preprocessing with a per-request retriever copy."""
+    r = retriever or _retriever
+    if r is None:
         return question
     from query import (
         preprocess_query,
         _get_archetype_detector,
-        _get_query_reformulator,
         _get_metadata_extractor,
+        _get_domain_terminology,
     )
     return preprocess_query(
         question,
-        _retriever,
+        r,
         detector=_get_archetype_detector(),
-        reformulator=_get_query_reformulator(),
         metadata_extractor=_get_metadata_extractor(),
+        domain_terms=_get_domain_terminology(),
     )
 
 
@@ -185,8 +186,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -266,22 +267,27 @@ def query(req: QueryRequest):
         resolved_question = resolver.resolve(req.question, chat_history)
 
     try:
-        processed_question = _apply_query_preprocessing(resolved_question)
+        # Per-request retriever copy to avoid mutating shared state (weights, filters)
+        request_retriever = _retriever.model_copy() if _retriever is not None else None
+
+        processed_question = _apply_query_preprocessing(resolved_question, request_retriever)
 
         # Relevance checking with retry
         relevance_score = None
         retry_count = None
-        if RELEVANCE_CHECK_ENABLED and _retriever is not None:
+        if RELEVANCE_CHECK_ENABLED and request_retriever is not None:
             from relevance_checker import RelevanceChecker, retrieve_with_relevance_check
             checker = RelevanceChecker(threshold=RELEVANCE_THRESHOLD)
             _, rel_info = retrieve_with_relevance_check(
-                _retriever, processed_question, checker,
+                request_retriever, processed_question, checker,
                 max_retries=MAX_RETRIEVAL_RETRIES,
             )
             relevance_score = rel_info["score"]
             retry_count = rel_info["retry_count"]
             if rel_info["retry_count"] > 0:
-                processed_question = _apply_query_preprocessing(rel_info["final_query"])
+                processed_question = _apply_query_preprocessing(
+                    rel_info["final_query"], request_retriever,
+                )
 
         # Check if using agent or chain
         if ENABLE_SQL_AGENT and _agent is not None:

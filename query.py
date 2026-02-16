@@ -26,7 +26,6 @@ from config import (
     ENABLE_PARENT_RETRIEVAL,
     INTENT_CLASSIFICATION_ENABLED,
     ARCHETYPE_DETECTION_ENABLED,
-    QUERY_REFORMULATION_ENABLED,
     METADATA_EXTRACTION_ENABLED,
     QUERY_RESOLUTION_ENABLED,
     RELEVANCE_CHECK_ENABLED,
@@ -109,50 +108,61 @@ class HybridRetriever(BaseRetriever):
         return f"{source}:{page}:{doc.page_content[:200]}"
 
     def _get_relevant_documents(self, query: str, **kwargs) -> list[Document]:
-        # Dense retrieval via FAISS — fetch more candidates for reranking
+        doc_map: dict[str, Document] = {}
+        dense_ranks: dict[str, int] = {}
+        bm25_ranks: dict[str, int] = {}
+        rrf_k = 60  # Standard RRF constant
+
+        # Dense retrieval via FAISS
         dense_results = self.vectorstore.similarity_search_with_score(query, k=self.k_candidates)
+        for rank, (doc, _score) in enumerate(dense_results):
+            key = self._doc_key(doc)
+            doc_map[key] = doc
+            dense_ranks[key] = rank
 
         # BM25 keyword retrieval
         tokenized_query = tokenize(query)
         bm25_scores = self.bm25.get_scores(tokenized_query)
-        bm25_top = sorted(range(len(bm25_scores)), key=lambda i: bm25_scores[i], reverse=True)[:self.k_candidates]
-
-        # Combine scores from both retrievers using content-based keys
-        doc_scores: dict[str, float] = {}
-        doc_map: dict[str, Document] = {}
-
-        # Dense scores (lower distance = better, so invert)
-        if dense_results:
-            max_dist = max(s for _, s in dense_results) or 1.0
-            for doc, dist in dense_results:
-                key = self._doc_key(doc)
-                doc_map[key] = doc
-                doc_scores[key] = self.dense_weight * (1 - dist / (max_dist + 1e-6))
-
-        # BM25 scores
-        max_bm25 = max((bm25_scores[i] for i in bm25_top), default=1.0) or 1.0
-        for idx in bm25_top:
+        bm25_top = sorted(
+            range(len(bm25_scores)),
+            key=lambda i: bm25_scores[i],
+            reverse=True,
+        )[:self.k_candidates]
+        for rank, idx in enumerate(bm25_top):
             doc = self.bm25_docs[idx]
             key = self._doc_key(doc)
             doc_map[key] = doc
-            doc_scores[key] = doc_scores.get(key, 0) + self.bm25_weight * (bm25_scores[idx] / max_bm25)
+            bm25_ranks[key] = rank
 
-        # Take top candidates by hybrid score, then rerank with cross-encoder
-        ranked = sorted(doc_scores, key=lambda d: doc_scores[d], reverse=True)
-        candidates = [doc_map[d] for d in ranked[:self.k_candidates]]
+        # Reciprocal Rank Fusion
+        rrf_scores: dict[str, float] = {}
+        for key in doc_map:
+            score = 0.0
+            if key in dense_ranks:
+                score += self.dense_weight / (rrf_k + dense_ranks[key])
+            if key in bm25_ranks:
+                score += self.bm25_weight / (rrf_k + bm25_ranks[key])
+            rrf_scores[key] = score
+
+        # Sort by RRF score, take top candidates for reranking
+        ranked = sorted(rrf_scores, key=rrf_scores.get, reverse=True)
+        candidates = [doc_map[key] for key in ranked[:self.k_candidates]]
 
         if not candidates:
             return []
 
+        # Cross-encoder reranking
         pairs = [[query, doc.page_content] for doc in candidates]
         rerank_scores = self.cross_encoder.predict(pairs, show_progress_bar=False)
         reranked = sorted(zip(candidates, rerank_scores), key=lambda x: x[1], reverse=True)
-        top_docs = [doc for doc, _ in reranked[:self.k]]
 
-        # Apply metadata filters if set
+        # Apply metadata filters BEFORE final k-slice
+        filtered = [doc for doc, _ in reranked]
         if self.metadata_filters:
             from metadata_extractor import MetadataFilterApplier
-            top_docs = MetadataFilterApplier.apply(top_docs, self.metadata_filters)
+            filtered = MetadataFilterApplier.apply(filtered, self.metadata_filters)
+
+        top_docs = filtered[:self.k]
 
         # If parent-document retrieval is enabled, expand child chunks to parent chunks
         if self.parent_chunks is not None:
@@ -294,12 +304,10 @@ def _get_archetype_detector():
     return ArchetypeDetector()
 
 
-def _get_query_reformulator():
-    """Lazy-load query reformulator if enabled."""
-    if not QUERY_REFORMULATION_ENABLED:
-        return None
-    from archetype_detector import QueryReformulator
-    return QueryReformulator()
+def _get_domain_terminology() -> dict:
+    """Load domain terminology for query reformulation."""
+    from archetype_detector import _load_domain_terminology
+    return _load_domain_terminology()
 
 
 def _get_query_resolver():
@@ -327,20 +335,19 @@ def _get_relevance_checker():
 
 
 def preprocess_query(question: str, retriever: HybridRetriever,
-                     detector=None, reformulator=None,
-                     metadata_extractor=None) -> str:
-    """Apply archetype detection, query reformulation, and metadata extraction."""
-    archetype = None
+                     detector=None,
+                     metadata_extractor=None,
+                     domain_terms: dict | None = None) -> str:
+    """Apply archetype detection + reformulation (single LLM call) and metadata extraction."""
     if detector:
-        archetype = detector.detect(question)
+        archetype, question = detector.detect_and_reformulate(
+            question, domain_terms or {},
+        )
         bm25_w, dense_w = detector.get_weights(archetype)
         retriever.bm25_weight = bm25_w
         retriever.dense_weight = dense_w
         logger.info("Adjusted weights: bm25=%.2f, dense=%.2f for archetype %s",
                      bm25_w, dense_w, archetype)
-
-    if reformulator and archetype:
-        question = reformulator.reformulate(question, archetype)
 
     # Extract metadata filters and set on retriever
     if metadata_extractor:
@@ -351,6 +358,66 @@ def preprocess_query(question: str, retriever: HybridRetriever,
             retriever.metadata_filters = None
 
     return question
+
+
+def _run_pipeline(
+    question: str,
+    retriever: HybridRetriever,
+    qa,
+    agent,
+    chat_history: list,
+    classifier=None,
+    detector=None,
+    meta_extractor=None,
+    relevance_checker=None,
+    query_resolver=None,
+    domain_terms: dict | None = None,
+) -> dict | None:
+    """Core query pipeline shared by ask() and interactive().
+
+    Returns result dict, or None if the query was handled (e.g. greeting).
+    """
+    # Intent classification: skip RAG for greetings/chitchat
+    if classifier:
+        intent = classifier.classify(question)
+        response = classifier.get_chitchat_response(intent)
+        if response:
+            print(f"\n{response}\n")
+            return None
+
+    # Resolve follow-up questions into standalone queries
+    resolved = question
+    if query_resolver and chat_history:
+        resolved = query_resolver.resolve(question, chat_history)
+
+    # Archetype detection + reformulation + metadata extraction
+    processed = preprocess_query(
+        resolved, retriever, detector, meta_extractor, domain_terms,
+    )
+
+    # Relevance checking with retry
+    if relevance_checker:
+        from relevance_checker import retrieve_with_relevance_check
+        docs, rel_info = retrieve_with_relevance_check(
+            retriever, processed, relevance_checker,
+            max_retries=MAX_RETRIEVAL_RETRIES,
+        )
+        if rel_info["retry_count"] > 0:
+            processed = rel_info["final_query"]
+        # Use PreloadedRetriever to avoid double-retrieval in QA chain
+        if qa is not None:
+            qa.retriever = PreloadedRetriever(docs=docs)
+
+    if agent is not None:
+        result = agent.invoke(processed, chat_history=chat_history)
+    else:
+        result = qa.invoke({"question": processed, "chat_history": chat_history})
+
+    # Restore original retriever for subsequent queries
+    if relevance_checker and qa is not None:
+        qa.retriever = retriever
+
+    return result
 
 
 def interactive():
@@ -364,10 +431,10 @@ def interactive():
     chat_history = []
     classifier = _get_intent_classifier()
     detector = _get_archetype_detector()
-    reformulator = _get_query_reformulator()
     meta_extractor = _get_metadata_extractor()
     relevance_checker = _get_relevance_checker()
     query_resolver = _get_query_resolver()
+    domain_terms = _get_domain_terminology()
 
     print("RAG Science — ask questions about your papers (type 'quit' to exit)\n")
 
@@ -379,93 +446,40 @@ def interactive():
         if not question or question.lower() in ("quit", "exit", "q"):
             break
 
-        # Intent classification: skip RAG for greetings/chitchat
-        if classifier:
-            intent = classifier.classify(question)
-            response = classifier.get_chitchat_response(intent)
-            if response:
-                print(f"\n{response}\n")
-                continue
-
-        # Resolve follow-up questions into standalone queries
-        resolved_question = question
-        if query_resolver and chat_history:
-            resolved_question = query_resolver.resolve(question, chat_history)
-
-        # Archetype detection + query reformulation + metadata extraction
-        processed_question = preprocess_query(
-            resolved_question, retriever, detector, reformulator, meta_extractor
+        result = _run_pipeline(
+            question, retriever, qa, agent,
+            chat_history=chat_history,
+            classifier=classifier, detector=detector,
+            meta_extractor=meta_extractor,
+            relevance_checker=relevance_checker,
+            query_resolver=query_resolver,
+            domain_terms=domain_terms,
         )
-
-        # Relevance checking with retry
-        if relevance_checker:
-            from relevance_checker import retrieve_with_relevance_check
-            docs, rel_info = retrieve_with_relevance_check(
-                retriever, processed_question, relevance_checker,
-                max_retries=MAX_RETRIEVAL_RETRIES,
-            )
-            if rel_info["retry_count"] > 0:
-                processed_question = rel_info["final_query"]
-            # Use PreloadedRetriever to avoid double-retrieval in QA chain
-            if qa is not None:
-                qa.retriever = PreloadedRetriever(docs=docs)
-
-        if agent is not None:
-            result = agent.invoke(processed_question, chat_history=chat_history)
-        else:
-            result = qa.invoke({"question": processed_question, "chat_history": chat_history})
-        # Restore original retriever for subsequent queries
-        if relevance_checker and qa is not None:
-            qa.retriever = retriever
-        print_result(result)
-        chat_history.append((question, result["answer"]))
+        if result:
+            print_result(result)
+            chat_history.append((question, result["answer"]))
 
 
 def ask(question: str):
     from health import check_ollama
     check_ollama()
 
-    # Intent classification: skip RAG for greetings/chitchat
-    classifier = _get_intent_classifier()
-    if classifier:
-        intent = classifier.classify(question)
-        response = classifier.get_chitchat_response(intent)
-        if response:
-            print(f"\n{response}\n")
-            return
-
     vectorstore = load_vectorstore()
     retriever = build_retriever(vectorstore)
     qa = None if ENABLE_SQL_AGENT else build_qa_chain(retriever)
     agent = build_agent(retriever) if ENABLE_SQL_AGENT else None
 
-    # Archetype detection + query reformulation + metadata extraction
-    detector = _get_archetype_detector()
-    reformulator = _get_query_reformulator()
-    meta_extractor = _get_metadata_extractor()
-    processed_question = preprocess_query(
-        question, retriever, detector, reformulator, meta_extractor
+    result = _run_pipeline(
+        question, retriever, qa, agent,
+        chat_history=[],
+        classifier=_get_intent_classifier(),
+        detector=_get_archetype_detector(),
+        meta_extractor=_get_metadata_extractor(),
+        relevance_checker=_get_relevance_checker(),
+        domain_terms=_get_domain_terminology(),
     )
-
-    # Relevance checking with retry
-    relevance_checker = _get_relevance_checker()
-    if relevance_checker:
-        from relevance_checker import retrieve_with_relevance_check
-        docs, rel_info = retrieve_with_relevance_check(
-            retriever, processed_question, relevance_checker,
-            max_retries=MAX_RETRIEVAL_RETRIES,
-        )
-        if rel_info["retry_count"] > 0:
-            processed_question = rel_info["final_query"]
-        # Use PreloadedRetriever to avoid double-retrieval in QA chain
-        if qa is not None:
-            qa.retriever = PreloadedRetriever(docs=docs)
-
-    if agent is not None:
-        result = agent.invoke(processed_question, chat_history=[])
-    else:
-        result = qa.invoke({"question": processed_question, "chat_history": []})
-    print_result(result)
+    if result:
+        print_result(result)
 
 
 if __name__ == "__main__":

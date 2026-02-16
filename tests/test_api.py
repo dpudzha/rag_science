@@ -113,13 +113,14 @@ class TestQueryEndpoint:
             patch("api.RELEVANCE_CHECK_ENABLED", True),
             patch("api._retriever", mock_retriever),
             patch("api._apply_query_preprocessing",
-                  side_effect=lambda q: f"processed::{q}") as preprocess_mock,
+                  side_effect=lambda q, r=None: f"processed::{q}") as preprocess_mock,
         ):
             resp = client.post("/query", json={"question": "original question"})
 
         assert resp.status_code == 200
-        assert preprocess_mock.call_args_list[0].args == ("original question",)
-        assert preprocess_mock.call_args_list[1].args == ("rewritten question",)
+        # First arg is the question; second is the per-request retriever copy
+        assert preprocess_mock.call_args_list[0].args[0] == "original question"
+        assert preprocess_mock.call_args_list[1].args[0] == "rewritten question"
         invoke_payload = mock_chain.invoke.call_args.args[0]
         assert invoke_payload["question"] == "processed::rewritten question"
 

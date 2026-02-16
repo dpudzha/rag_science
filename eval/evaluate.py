@@ -116,7 +116,7 @@ def recall_at_k_chunks(expected_chunk_ids: list[str], retrieved_docs: list, k: i
 
 def run_eval(dataset_path: Path | None = None):
     """Run evaluation and print metrics."""
-    from query import load_vectorstore, build_retriever
+    from retriever import load_vectorstore, build_retriever
 
     setup_logging()
 

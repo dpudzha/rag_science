@@ -213,7 +213,7 @@ class TestSaveLargeTablesToSql:
                 "sheet_name": "Sheet1",
             },
         }]
-        with patch("sql_database.SQLDatabase") as MockDB:
+        with patch("tools.sql_database.SQLDatabase") as MockDB:
             MockDB.return_value = MagicMock()
             chunks = _save_large_tables_to_sql(large_tables)
 
@@ -242,7 +242,7 @@ class TestSaveLargeTablesToSql:
                 "num_rows": 104,
             },
         }]
-        with patch("sql_database.SQLDatabase") as MockDB:
+        with patch("tools.sql_database.SQLDatabase") as MockDB:
             MockDB.return_value = MagicMock()
             chunks = _save_large_tables_to_sql(large_tables)
 

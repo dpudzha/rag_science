@@ -56,6 +56,61 @@ def _load_domain_terminology(path: Path | None = None) -> dict:
     return {}
 
 
+_STOP_WORDS = {
+    "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "does", "for",
+    "from", "how", "in", "is", "it", "of", "on", "or", "that", "the", "they",
+    "this", "to", "was", "what", "when", "where", "which", "who", "why", "will",
+    "with", "were",
+}
+
+
+def _content_tokens(text: str) -> set[str]:
+    tokens = set(re.findall(r"[A-Za-z0-9][A-Za-z0-9\-]{1,}", text.lower()))
+    return {tok for tok in tokens if tok not in _STOP_WORDS}
+
+
+def _entity_tokens(text: str) -> set[str]:
+    return {
+        tok for tok in re.findall(r"\b[A-Za-z0-9][A-Za-z0-9\-]{1,}\b", text)
+        if any(ch.isupper() for ch in tok) or any(ch.isdigit() for ch in tok)
+    }
+
+
+def _asks_methodology(text: str) -> bool:
+    lowered = text.lower()
+    method_cues = ("method", "methodology", "procedure", "protocol", "technique", "trained", "training", "how ")
+    return any(cue in lowered for cue in method_cues)
+
+
+def _is_safe_rewrite(original: str, rewritten: str, archetype: str) -> bool:
+    """Reject rewrites that drift away from the original query intent."""
+    if original.strip().lower() == rewritten.strip().lower():
+        return True
+
+    original_tokens = _content_tokens(original)
+    rewritten_tokens = _content_tokens(rewritten)
+    if original_tokens:
+        overlap = len(original_tokens & rewritten_tokens) / len(original_tokens)
+        if overlap < 0.5:
+            return False
+
+    missing_entities = {
+        ent.lower() for ent in _entity_tokens(original)
+        if ent.lower() not in rewritten.lower()
+    }
+    if missing_entities:
+        return False
+
+    if archetype == "HOW_METHODOLOGY":
+        has_method_terms = any(
+            term in rewritten.lower() for term in ("methodology", "experimental procedure", "procedure")
+        )
+        if has_method_terms and not _asks_methodology(original):
+            return False
+
+    return True
+
+
 class ArchetypeDetector:
     """Detects the archetype of a research query using an LLM."""
 
@@ -107,7 +162,11 @@ class ArchetypeDetector:
             query_match = _QUERY_RE.search(text)
             reformulated = query_match.group(1).strip() if query_match else query
 
-            logger.info("Combined: archetype=%s, reformulated='%s'", archetype, reformulated[:60])
+            if reformulated != query and not _is_safe_rewrite(query, reformulated, archetype):
+                logger.info("Combined: rejected reformulation drift, keeping original query")
+                reformulated = query
+
+            logger.info("Combined: archetype=%s, reformulated='%s'", archetype, reformulated)
             return archetype, reformulated
         except Exception as e:
             logger.warning("Combined detect+reformulate failed (%s), using defaults", e)
@@ -127,57 +186,18 @@ class QueryReformulator:
 
     @staticmethod
     def _content_tokens(text: str) -> set[str]:
-        stop_words = {
-            "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "does", "for",
-            "from", "how", "in", "is", "it", "of", "on", "or", "that", "the", "they",
-            "this", "to", "was", "what", "when", "where", "which", "who", "why", "will",
-            "with", "were",
-        }
-        tokens = set(re.findall(r"[A-Za-z0-9][A-Za-z0-9\-]{1,}", text.lower()))
-        return {tok for tok in tokens if tok not in stop_words}
+        return _content_tokens(text)
 
     @staticmethod
     def _entity_tokens(text: str) -> set[str]:
-        return {
-            tok for tok in re.findall(r"\b[A-Za-z0-9][A-Za-z0-9\-]{1,}\b", text)
-            if any(ch.isupper() for ch in tok) or any(ch.isdigit() for ch in tok)
-        }
+        return _entity_tokens(text)
 
     @staticmethod
     def _asks_methodology(text: str) -> bool:
-        lowered = text.lower()
-        method_cues = ("method", "methodology", "procedure", "protocol", "technique", "trained", "training", "how ")
-        return any(cue in lowered for cue in method_cues)
+        return _asks_methodology(text)
 
     def _is_safe_rewrite(self, original: str, rewritten: str, archetype: str) -> bool:
-        """Reject rewrites that drift away from the original query intent."""
-        if original.strip().lower() == rewritten.strip().lower():
-            return True
-
-        original_tokens = self._content_tokens(original)
-        rewritten_tokens = self._content_tokens(rewritten)
-        if original_tokens:
-            overlap = len(original_tokens & rewritten_tokens) / len(original_tokens)
-            if overlap < 0.5:
-                return False
-
-        # Preserve high-signal entities like ITk, BERT, Stage-2, years, versions.
-        missing_entities = {
-            ent.lower() for ent in self._entity_tokens(original)
-            if ent.lower() not in rewritten.lower()
-        }
-        if missing_entities:
-            return False
-
-        # Guard against misclassified archetype injecting methodology wording.
-        if archetype == "HOW_METHODOLOGY":
-            has_method_terms = any(
-                term in rewritten.lower() for term in ("methodology", "experimental procedure", "procedure")
-            )
-            if has_method_terms and not self._asks_methodology(original):
-                return False
-
-        return True
+        return _is_safe_rewrite(original, rewritten, archetype)
 
     def reformulate(self, query: str, archetype: str) -> str:
         """Rewrite the query with domain awareness. Falls back to original on error."""
@@ -202,7 +222,7 @@ class QueryReformulator:
                 if self._is_safe_rewrite(query, reformulated, archetype):
                     logger.info("Reformulated: '%s' -> '%s'", query, reformulated)
                     return reformulated
-                logger.info("Rejected reformulation drift, keeping original query: '%s'", query[:60])
+                logger.info("Rejected reformulation drift, keeping original query: '%s'", query)
             return query
         except Exception as e:
             logger.warning("Query reformulation failed (%s), using original", e)

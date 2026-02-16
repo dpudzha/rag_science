@@ -5,7 +5,7 @@ from typing import Any, Optional
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langchain_core.callbacks import CallbackManagerForToolRun
-from sql_database import SQLDatabase
+from tools.sql_database import SQLDatabase
 
 logger = logging.getLogger(__name__)
 

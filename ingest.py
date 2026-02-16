@@ -562,7 +562,7 @@ def _save_large_tables_to_sql(large_tables: list[dict]) -> list[Document]:
     if not large_tables:
         return description_chunks
     try:
-        from sql_database import SQLDatabase
+        from tools.sql_database import SQLDatabase
         db = SQLDatabase()
         for item in large_tables:
             source = item["source"]

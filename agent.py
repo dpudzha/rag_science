@@ -7,7 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 
 from utils import get_default_llm
-from sql_database import SQLDatabase
+from tools.sql_database import SQLDatabase
 from tools.rag_tool import RAGTool
 from tools.sql_tool import SQLTool
 

@@ -1,4 +1,4 @@
-"""Tests for query.py: hybrid scoring, reranking, BM25 loading."""
+"""Tests for query.py and retriever.py: hybrid scoring, reranking, BM25 loading."""
 import pickle
 import pytest
 from pathlib import Path
@@ -10,11 +10,11 @@ from rank_bm25 import BM25Okapi
 
 class TestTokenize:
     def test_basic(self):
-        from query import tokenize
+        from utils import tokenize
         assert tokenize("Hello World!") == ["hello", "world"]
 
     def test_alphanumeric(self):
-        from query import tokenize
+        from utils import tokenize
         assert "42" in tokenize("The answer is 42.")
 
 
@@ -28,8 +28,8 @@ class TestLoadBm25:
         with open(pkl_path, "wb") as f:
             pickle.dump({"bm25": bm25, "docs": sample_documents}, f)
 
-        with patch("query.VECTORSTORE_DIR", str(tmp_vectorstore)):
-            from query import load_bm25
+        with patch("retriever.VECTORSTORE_DIR", str(tmp_vectorstore)):
+            from retriever import load_bm25
             result = load_bm25()
 
         assert result is not None
@@ -37,15 +37,15 @@ class TestLoadBm25:
         assert len(loaded_docs) == len(sample_documents)
 
     def test_returns_none_when_missing(self, tmp_vectorstore):
-        with patch("query.VECTORSTORE_DIR", str(tmp_vectorstore)):
-            from query import load_bm25
+        with patch("retriever.VECTORSTORE_DIR", str(tmp_vectorstore)):
+            from retriever import load_bm25
             assert load_bm25() is None
 
 
 class TestLoadVectorstore:
     def test_raises_when_missing(self, tmp_vectorstore):
-        with patch("query.VECTORSTORE_DIR", str(tmp_vectorstore)):
-            from query import load_vectorstore, VectorstoreNotFoundError
+        with patch("retriever.VECTORSTORE_DIR", str(tmp_vectorstore)):
+            from retriever import load_vectorstore, VectorstoreNotFoundError
             with pytest.raises(VectorstoreNotFoundError):
                 load_vectorstore()
 
@@ -56,45 +56,45 @@ class TestLoadParentChunks:
         with open(pkl_path, "wb") as f:
             pickle.dump(sample_documents, f)
 
-        with patch("query.VECTORSTORE_DIR", str(tmp_vectorstore)):
-            from query import load_parent_chunks
+        with patch("retriever.VECTORSTORE_DIR", str(tmp_vectorstore)):
+            from retriever import load_parent_chunks
             result = load_parent_chunks()
         assert result is not None
         assert len(result) == len(sample_documents)
 
     def test_returns_none_when_missing(self, tmp_vectorstore):
-        with patch("query.VECTORSTORE_DIR", str(tmp_vectorstore)):
-            from query import load_parent_chunks
+        with patch("retriever.VECTORSTORE_DIR", str(tmp_vectorstore)):
+            from retriever import load_parent_chunks
             assert load_parent_chunks() is None
 
 
 class TestCrossEncoderSingleton:
     def test_lazy_loaded_once(self):
-        import query
-        query._cross_encoder = None  # Reset
-        with patch("query.CrossEncoder") as MockCE:
+        import retriever
+        retriever._cross_encoder = None  # Reset
+        with patch("retriever.CrossEncoder") as MockCE:
             mock_instance = MagicMock()
             MockCE.return_value = mock_instance
 
-            result1 = query._get_cross_encoder()
-            result2 = query._get_cross_encoder()
+            result1 = retriever._get_cross_encoder()
+            result2 = retriever._get_cross_encoder()
 
             assert result1 is result2
             MockCE.assert_called_once()
 
-        query._cross_encoder = None  # Clean up
+        retriever._cross_encoder = None  # Clean up
 
 
 class TestHybridRetrieverDocKey:
     def test_doc_key_format(self):
-        from query import HybridRetriever
+        from retriever import HybridRetriever
         doc = Document(page_content="Hello world " * 50, metadata={"source": "test.pdf", "page": 1})
         key = HybridRetriever._doc_key(doc)
         assert key.startswith("test.pdf:1:")
         assert len(key.split(":", 2)[2]) <= 200
 
     def test_public_get_relevant_documents_delegates(self):
-        from query import HybridRetriever
+        from retriever import HybridRetriever
         retriever = MagicMock(spec=HybridRetriever)
         expected = [Document(page_content="test", metadata={})]
         retriever._get_relevant_documents.return_value = expected
@@ -106,7 +106,7 @@ class TestHybridRetrieverDocKey:
 
 class TestPreloadedRetriever:
     def test_returns_cached_docs(self):
-        from query import PreloadedRetriever
+        from retriever import PreloadedRetriever
         docs = [
             Document(page_content="doc1", metadata={"source": "a.pdf"}),
             Document(page_content="doc2", metadata={"source": "b.pdf"}),
@@ -116,7 +116,7 @@ class TestPreloadedRetriever:
         assert result == docs
 
     def test_ignores_query_text(self):
-        from query import PreloadedRetriever
+        from retriever import PreloadedRetriever
         docs = [Document(page_content="fixed", metadata={})]
         retriever = PreloadedRetriever(docs=docs)
         assert retriever.invoke("query A") == retriever.invoke("query B")

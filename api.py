@@ -42,7 +42,7 @@ def _get_qa():
     if _qa_chain is None and _agent is None:
         with _qa_init_lock:
             if _qa_chain is None and _agent is None:
-                from query import load_vectorstore, build_retriever, build_qa_chain
+                from retriever import load_vectorstore, build_retriever, build_qa_chain
                 vs = load_vectorstore()
                 _retriever = build_retriever(vs)
                 if ENABLE_SQL_AGENT:

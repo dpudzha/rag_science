@@ -4,7 +4,7 @@ import sqlite3
 import pytest
 import pandas as pd
 
-from sql_database import SQLDatabase
+from tools.sql_database import SQLDatabase
 
 
 @pytest.fixture
@@ -82,7 +82,7 @@ class TestSQLDatabaseDefaultPath:
         monkeypatch.setenv("SQL_DATABASE_PATH", "")
 
         import config
-        import sql_database
+        import tools.sql_database as sql_database
 
         importlib.reload(config)
         importlib.reload(sql_database)
@@ -96,7 +96,7 @@ class TestSQLDatabaseDefaultPath:
         monkeypatch.setenv("SQL_DATABASE_PATH", str(explicit_db))
 
         import config
-        import sql_database
+        import tools.sql_database as sql_database
 
         importlib.reload(config)
         importlib.reload(sql_database)

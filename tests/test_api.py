@@ -250,7 +250,7 @@ class TestConcurrencySafety:
             calls["chain"] += 1
             return sentinel_chain
 
-        fake_query_module = types.SimpleNamespace(
+        fake_retriever_module = types.SimpleNamespace(
             load_vectorstore=_slow_vectorstore,
             build_retriever=_build_retriever,
             build_qa_chain=_build_qa_chain,
@@ -258,7 +258,7 @@ class TestConcurrencySafety:
 
         with (
             patch("api.ENABLE_SQL_AGENT", False),
-            patch.dict("sys.modules", {"query": fake_query_module}),
+            patch.dict("sys.modules", {"retriever": fake_retriever_module}),
         ):
             with concurrent.futures.ThreadPoolExecutor(max_workers=12) as executor:
                 results = list(executor.map(lambda _: api._get_qa(), range(12)))

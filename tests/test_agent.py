@@ -29,7 +29,7 @@ class TestRAGTool:
 class TestSQLTool:
     def test_returns_results(self, tmp_path):
         import pandas as pd
-        from sql_database import SQLDatabase
+        from tools.sql_database import SQLDatabase
         from tools.sql_tool import SQLTool
         from langchain_core.messages import AIMessage
 
@@ -47,7 +47,7 @@ class TestSQLTool:
 
     def test_rejects_unsafe_sql(self, tmp_path):
         import pandas as pd
-        from sql_database import SQLDatabase
+        from tools.sql_database import SQLDatabase
         from tools.sql_tool import SQLTool
         from langchain_core.messages import AIMessage
 
@@ -63,7 +63,7 @@ class TestSQLTool:
         assert "safety check failed" in result.lower() or "Only SELECT" in result
 
     def test_handles_no_tables(self, tmp_path):
-        from sql_database import SQLDatabase
+        from tools.sql_database import SQLDatabase
         from tools.sql_tool import SQLTool
 
         db = SQLDatabase(db_path=tmp_path / "empty.db")

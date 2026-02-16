@@ -259,20 +259,6 @@ def query(req: QueryRequest):
         resolved_question = resolver.resolve(req.question, chat_history)
 
     try:
-        # Check if using agent or chain
-        if ENABLE_SQL_AGENT and _agent is not None:
-            result = _agent.invoke(resolved_question, chat_history=chat_history)
-            answer = result.get("answer", "")
-            tool_used = result.get("tool_used")
-            sources = _extract_sources_from_result(result)
-
-            _append_session_history(req.session_id, req.question, answer)
-
-            return QueryResponse(
-                answer=answer, sources=sources, session_id=req.session_id,
-                tool_used=tool_used,
-            )
-
         processed_question = _apply_query_preprocessing(resolved_question)
 
         # Relevance checking with retry
@@ -289,6 +275,20 @@ def query(req: QueryRequest):
             retry_count = rel_info["retry_count"]
             if rel_info["retry_count"] > 0:
                 processed_question = _apply_query_preprocessing(rel_info["final_query"])
+
+        # Check if using agent or chain
+        if ENABLE_SQL_AGENT and _agent is not None:
+            result = _agent.invoke(processed_question, chat_history=chat_history)
+            answer = result.get("answer", "")
+            tool_used = result.get("tool_used")
+            sources = _extract_sources_from_result(result)
+
+            _append_session_history(req.session_id, req.question, answer)
+
+            return QueryResponse(
+                answer=answer, sources=sources, session_id=req.session_id,
+                tool_used=tool_used, relevance_score=relevance_score, retry_count=retry_count,
+            )
 
         result = qa.invoke({"question": processed_question, "chat_history": chat_history})
     except ConnectionError as e:

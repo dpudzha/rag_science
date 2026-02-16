@@ -94,7 +94,7 @@ class QueryReformulator:
             "a", "an", "and", "are", "as", "at", "be", "by", "did", "do", "does", "for",
             "from", "how", "in", "is", "it", "of", "on", "or", "that", "the", "they",
             "this", "to", "was", "what", "when", "where", "which", "who", "why", "will",
-            "with",
+            "with", "were",
         }
         tokens = set(re.findall(r"[A-Za-z0-9][A-Za-z0-9\-]{1,}", text.lower()))
         return {tok for tok in tokens if tok not in stop_words}
@@ -161,7 +161,7 @@ class QueryReformulator:
             reformulated = response.content.strip()
             if reformulated:
                 if self._is_safe_rewrite(query, reformulated, archetype):
-                    logger.info("Reformulated: '%s' -> '%s'", query[:60], reformulated[:60])
+                    logger.info("Reformulated: '%s' -> '%s'", query, reformulated)
                     return reformulated
                 logger.info("Rejected reformulation drift, keeping original query: '%s'", query[:60])
             return query

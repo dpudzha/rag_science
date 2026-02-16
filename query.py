@@ -351,7 +351,8 @@ def interactive():
 
     vectorstore = load_vectorstore()
     retriever = build_retriever(vectorstore)
-    qa = build_qa_chain(retriever)
+    qa = None if ENABLE_SQL_AGENT else build_qa_chain(retriever)
+    agent = build_agent(retriever) if ENABLE_SQL_AGENT else None
     chat_history = []
     classifier = _get_intent_classifier()
     detector = _get_archetype_detector()
@@ -398,7 +399,10 @@ def interactive():
             if rel_info["retry_count"] > 0:
                 processed_question = rel_info["final_query"]
 
-        result = qa.invoke({"question": processed_question, "chat_history": chat_history})
+        if agent is not None:
+            result = agent.invoke(processed_question, chat_history=chat_history)
+        else:
+            result = qa.invoke({"question": processed_question, "chat_history": chat_history})
         print_result(result)
         chat_history.append((question, result["answer"]))
 
@@ -418,7 +422,8 @@ def ask(question: str):
 
     vectorstore = load_vectorstore()
     retriever = build_retriever(vectorstore)
-    qa = build_qa_chain(retriever)
+    qa = None if ENABLE_SQL_AGENT else build_qa_chain(retriever)
+    agent = build_agent(retriever) if ENABLE_SQL_AGENT else None
 
     # Archetype detection + query reformulation + metadata extraction
     detector = _get_archetype_detector()
@@ -439,7 +444,10 @@ def ask(question: str):
         if rel_info["retry_count"] > 0:
             processed_question = rel_info["final_query"]
 
-    result = qa.invoke({"question": processed_question, "chat_history": []})
+    if agent is not None:
+        result = agent.invoke(processed_question, chat_history=[])
+    else:
+        result = qa.invoke({"question": processed_question, "chat_history": []})
     print_result(result)
 
 

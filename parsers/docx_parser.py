@@ -22,8 +22,15 @@ class DOCXParser:
             if para.text.strip():
                 full_text.append(para.text)
 
+        title = Path(path).stem
         if full_text:
-            pages.append({"text": "\n".join(full_text), "page": 1})
+            for line in full_text:
+                if len(line.strip()) > 10:
+                    title = line.strip()
+                    break
+            body = "\n\n".join(full_text)
+            markdown = f"# {title}\n\n{body}"
+            pages.append({"text": markdown, "page": 1})
 
         # Extract tables
         for i, table in enumerate(doc.tables):
@@ -31,18 +38,10 @@ class DOCXParser:
             if table_data:
                 tables.append({"data": table_data, "index": i})
 
-        # Derive title from first paragraph
-        title = None
-        if full_text:
-            for line in full_text:
-                if len(line.strip()) > 10:
-                    title = line.strip()
-                    break
-
         return {
             "pages": pages,
             "source": Path(path).name,
-            "title": title or Path(path).stem,
+            "title": title,
             "creation_date": "",
             "authors": "",
             "tables": tables,

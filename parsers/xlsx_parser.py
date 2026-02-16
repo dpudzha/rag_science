@@ -36,15 +36,18 @@ class XLSXParser:
             })
 
             # Also create a text representation for vectorstore
-            text_repr = f"Sheet: {sheet_name}\n"
-            text_repr += f"Columns: {', '.join(header)}\n"
-            text_repr += f"Rows: {len(rows)}\n"
+            text_repr = f"# {Path(path).stem}\n\n## Sheet: {sheet_name}\n\n"
+            text_repr += f"- Columns: {', '.join(header)}\n"
+            text_repr += f"- Rows: {len(rows)}\n\n"
+            if header:
+                text_repr += "| " + " | ".join(header) + " |\n"
+                text_repr += "| " + " | ".join(["---"] * len(header)) + " |\n"
             # Include sample rows for context
             sample_rows = min(5, len(rows))
             for row_data in table_data[1:sample_rows + 1]:
-                text_repr += " | ".join(row_data) + "\n"
+                text_repr += "| " + " | ".join(row_data) + " |\n"
             if len(rows) > sample_rows:
-                text_repr += f"... ({len(rows) - sample_rows} more rows)\n"
+                text_repr += f"\n... ({len(rows) - sample_rows} more rows)\n"
 
             pages.append({"text": text_repr, "page": 1})
 

@@ -8,6 +8,7 @@ import pickle
 import re
 import shutil
 import tempfile
+from datetime import datetime, timedelta, timezone
 
 import fitz
 from pathlib import Path
@@ -31,6 +32,11 @@ from config import (
     SUPPORTED_FORMATS,
     ENABLE_TABLE_EXTRACTION,
     LARGE_TABLE_THRESHOLD,
+    ENABLE_S3_INGEST,
+    S3_BUCKET,
+    S3_PREFIX,
+    S3_REGION,
+    S3_LOOKBACK_HOURS,
 )
 
 logger = logging.getLogger(__name__)
@@ -96,10 +102,12 @@ def extract_text_from_pdf(pdf_path: str) -> dict:
                 pages.append({"text": text, "page": page_num})
                 if title is None:
                     title = _extract_title(text)
+    resolved_title = title or Path(pdf_path).stem
+    markdown_pages = _markdownify_pages(pages, resolved_title)
     return {
-        "pages": pages,
+        "pages": markdown_pages,
         "source": Path(pdf_path).name,
-        "title": title or Path(pdf_path).stem,
+        "title": resolved_title,
         "creation_date": creation_date or "",
         "authors": authors or "",
     }
@@ -112,6 +120,53 @@ def _extract_title(first_page_text: str) -> str | None:
         if len(line) > 10 and not line.startswith("http"):
             return line
     return None
+
+
+def _to_markdown_lines(text: str) -> str:
+    """Normalize plain text into lightweight markdown paragraphs."""
+    lines = [line.strip() for line in text.splitlines()]
+    return "\n\n".join(line for line in lines if line)
+
+
+def _markdownify_pages(pages: list[dict], title: str) -> list[dict]:
+    """Wrap extracted page text in markdown headings."""
+    md_pages = []
+    for page_info in pages:
+        page_num = page_info.get("page", 1)
+        body = _to_markdown_lines(page_info.get("text", ""))
+        if not body:
+            continue
+        md_text = f"# {title}\n\n## Page {page_num}\n\n{body}"
+        md_pages.append({"text": md_text, "page": page_num})
+    return md_pages
+
+
+def _split_text_by_token_limit(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
+    """Split text into chunks bounded by token count using token spans."""
+    lowered = text.lower()
+    matches = list(_TOKEN_RE.finditer(lowered))
+    if not matches:
+        return [text] if text.strip() else []
+
+    if chunk_size <= 0:
+        raise ValueError("chunk_size must be positive")
+    overlap = max(0, min(chunk_overlap, chunk_size - 1))
+    stride = chunk_size - overlap
+
+    chunks = []
+    start = 0
+    total_tokens = len(matches)
+    while start < total_tokens:
+        end = min(start + chunk_size, total_tokens)
+        char_start = matches[start].start()
+        char_end = matches[end - 1].end()
+        chunk = text[char_start:char_end].strip()
+        if chunk:
+            chunks.append(chunk)
+        if end >= total_tokens:
+            break
+        start += stride
+    return chunks
 
 
 def _detect_section_header(text: str) -> str | None:
@@ -215,6 +270,47 @@ def load_new_documents(folder: str) -> tuple[list[dict], list[dict]]:
     return docs, large_tables
 
 
+def sync_recent_s3_documents(target_dir: str) -> int:
+    """Download documents uploaded within the configured lookback window."""
+    if not ENABLE_S3_INGEST:
+        return 0
+    if not S3_BUCKET:
+        logger.warning("ENABLE_S3_INGEST is true but S3_BUCKET is empty; skipping S3 sync")
+        return 0
+
+    try:
+        import boto3
+    except ImportError:
+        logger.warning("boto3 not installed; skipping S3 sync")
+        return 0
+
+    target = Path(target_dir)
+    target.mkdir(parents=True, exist_ok=True)
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=max(1, S3_LOOKBACK_HOURS))
+    downloaded = 0
+
+    client_kwargs = {"region_name": S3_REGION} if S3_REGION else {}
+    s3 = boto3.client("s3", **client_kwargs)
+    paginator = s3.get_paginator("list_objects_v2")
+    for page in paginator.paginate(Bucket=S3_BUCKET, Prefix=S3_PREFIX):
+        for obj in page.get("Contents", []):
+            key = obj.get("Key", "")
+            if not key:
+                continue
+            if obj.get("LastModified") and obj["LastModified"] < cutoff:
+                continue
+            suffix = Path(key).suffix.lower().lstrip(".")
+            if suffix not in {fmt.strip().lower() for fmt in SUPPORTED_FORMATS}:
+                continue
+            destination = target / key
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            s3.download_file(S3_BUCKET, key, str(destination))
+            downloaded += 1
+
+    logger.info("Downloaded %d recent documents from s3://%s/%s", downloaded, S3_BUCKET, S3_PREFIX)
+    return downloaded
+
+
 def _page_at_offset(page_offsets: list[int], page_numbers: list[int], offset: int) -> int:
     """Return the page number for a given character offset in the concatenated text."""
     idx = bisect.bisect_right(page_offsets, offset) - 1
@@ -222,11 +318,6 @@ def _page_at_offset(page_offsets: list[int], page_numbers: list[int], offset: in
 
 
 def chunk_documents(docs: list[dict]) -> list[Document]:
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=CHUNK_OVERLAP,
-        separators=CHUNK_SEPARATORS,
-    )
     all_chunks = []
     for doc in docs:
         full_text = ""
@@ -242,8 +333,7 @@ def chunk_documents(docs: list[dict]) -> list[Document]:
 
         title = doc.get("title", "")
 
-        # Use split_text_with_offsets-like approach: track offset by scanning
-        chunks = splitter.split_text(full_text)
+        chunks = _split_text_by_token_limit(full_text, CHUNK_SIZE, CHUNK_OVERLAP)
         search_start = 0
         for chunk_text in chunks:
             offset = full_text.find(chunk_text, search_start)
@@ -505,6 +595,8 @@ def _save_large_tables_to_sql(large_tables: list[dict]) -> list[Document]:
 def ingest():
     from health import check_ollama
     check_ollama()
+
+    sync_recent_s3_documents(PAPERS_DIR)
 
     # Use multi-format document loading
     docs, large_tables = load_new_documents(PAPERS_DIR)

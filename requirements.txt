@@ -12,3 +12,4 @@ uvicorn[standard]
 httpx
 python-docx
 openpyxl
+boto3

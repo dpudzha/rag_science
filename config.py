@@ -4,8 +4,8 @@ PAPERS_DIR = os.getenv("PAPERS_DIR", "./papers")
 VECTORSTORE_DIR = os.getenv("VECTORSTORE_DIR", "./vectorstore")
 INGEST_RECORD = os.getenv("INGEST_RECORD", "./vectorstore/ingested.json")
 
-CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1500"))
-CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "200"))
+CHUNK_SIZE = int(os.getenv("CHUNK_SIZE", "1200"))
+CHUNK_OVERLAP = int(os.getenv("CHUNK_OVERLAP", "120"))
 CHUNK_SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
 
 # Ollama settings
@@ -14,7 +14,7 @@ EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
 LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1:8b")
 
 # Retrieval settings
-TOP_K_CANDIDATES = int(os.getenv("TOP_K_CANDIDATES", "20"))
+TOP_K_CANDIDATES = int(os.getenv("TOP_K_CANDIDATES", "50"))
 TOP_K = int(os.getenv("TOP_K", "4"))
 BM25_WEIGHT = float(os.getenv("BM25_WEIGHT", "0.3"))
 DENSE_WEIGHT = float(os.getenv("DENSE_WEIGHT", "0.7"))
@@ -55,6 +55,13 @@ AGENT_MAX_ITERATIONS = int(os.getenv("AGENT_MAX_ITERATIONS", "5"))
 SUPPORTED_FORMATS = os.getenv("SUPPORTED_FORMATS", "pdf,docx,xlsx").split(",")
 ENABLE_TABLE_EXTRACTION = os.getenv("ENABLE_TABLE_EXTRACTION", "true").lower() == "true"
 LARGE_TABLE_THRESHOLD = int(os.getenv("LARGE_TABLE_THRESHOLD", "100"))
+
+# S3 ingestion (optional)
+ENABLE_S3_INGEST = os.getenv("ENABLE_S3_INGEST", "false").lower() == "true"
+S3_BUCKET = os.getenv("S3_BUCKET", "")
+S3_PREFIX = os.getenv("S3_PREFIX", "")
+S3_REGION = os.getenv("S3_REGION", "")
+S3_LOOKBACK_HOURS = int(os.getenv("S3_LOOKBACK_HOURS", "3"))
 
 # Parent document retrieval (Phase 3)
 ENABLE_PARENT_RETRIEVAL = os.getenv("ENABLE_PARENT_RETRIEVAL", "false").lower() == "true"

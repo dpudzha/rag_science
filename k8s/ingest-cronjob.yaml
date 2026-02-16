@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: rag-science-ingest
+spec:
+  schedule: "0 */3 * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 2
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: ingest
+              image: rag-science:latest
+              imagePullPolicy: IfNotPresent
+              command: ["python", "ingest.py"]
+              envFrom:
+                - secretRef:
+                    name: rag-science-env

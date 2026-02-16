@@ -1,8 +1,10 @@
 """Tests for ingest.py: chunking, MD5 dedup, page attribution, metadata enrichment."""
 import json
 import pickle
+import types
 import pytest
 from pathlib import Path
+from datetime import datetime, timezone, timedelta
 from unittest.mock import patch, MagicMock
 
 from langchain_core.documents import Document
@@ -52,10 +54,25 @@ class TestChunkDocuments:
             "source": "test.pdf",
             "title": "Test",
         }
-        chunks = chunk_documents([doc])
+        with patch("ingest.CHUNK_SIZE", 200), patch("ingest.CHUNK_OVERLAP", 20):
+            chunks = chunk_documents([doc])
         # First chunk should be page 1, last chunk(s) should be page 2
         assert chunks[0].metadata["page"] == 1
         assert chunks[-1].metadata["page"] == 2
+
+    def test_respects_token_limit(self):
+        from ingest import chunk_documents
+        doc = {
+            "pages": [{"text": "word " * 1300, "page": 1}],
+            "source": "tokens.pdf",
+            "title": "Token Limit",
+        }
+        with patch("ingest.CHUNK_SIZE", 1200), patch("ingest.CHUNK_OVERLAP", 120):
+            chunks = chunk_documents([doc])
+        assert len(chunks) >= 2
+        for chunk in chunks:
+            token_count = len([t for t in chunk.page_content.split() if t.isalnum()])
+            assert token_count <= 1220  # includes title/section prefix tokens
 
 
 class TestPageAtOffset:
@@ -289,3 +306,51 @@ class TestIngestFlow:
             "newhash": "paper.pdf",
         }
         mock_save_ingest_record.assert_not_called()
+
+    def test_ingest_syncs_s3_before_loading_documents(self):
+        import ingest
+
+        with patch("health.check_ollama"), \
+             patch("ingest.sync_recent_s3_documents") as mock_sync, \
+             patch("ingest.load_new_documents", return_value=([], [])):
+            ingest.ingest()
+
+        mock_sync.assert_called_once()
+
+
+class TestS3Sync:
+    def test_returns_zero_when_disabled(self):
+        from ingest import sync_recent_s3_documents
+        with patch("ingest.ENABLE_S3_INGEST", False):
+            assert sync_recent_s3_documents("/tmp") == 0
+
+    def test_downloads_only_recent_supported_files(self, tmp_path):
+        from ingest import sync_recent_s3_documents
+
+        class FakePaginator:
+            def paginate(self, Bucket, Prefix):
+                now = datetime.now(timezone.utc)
+                return [{
+                    "Contents": [
+                        {"Key": "new/report.pdf", "LastModified": now},
+                        {"Key": "new/table.xlsx", "LastModified": now},
+                        {"Key": "old/doc.pdf", "LastModified": now - timedelta(hours=10)},
+                        {"Key": "new/image.png", "LastModified": now},
+                    ],
+                }]
+
+        fake_s3 = MagicMock()
+        fake_s3.get_paginator.return_value = FakePaginator()
+
+        fake_boto3 = types.SimpleNamespace(client=MagicMock(return_value=fake_s3))
+
+        with patch("ingest.ENABLE_S3_INGEST", True), \
+             patch("ingest.S3_BUCKET", "bucket"), \
+             patch("ingest.S3_PREFIX", "new/"), \
+             patch("ingest.S3_LOOKBACK_HOURS", 3), \
+             patch("ingest.SUPPORTED_FORMATS", ["pdf", "xlsx"]), \
+             patch.dict("sys.modules", {"boto3": fake_boto3}):
+            downloaded = sync_recent_s3_documents(str(tmp_path))
+
+        assert downloaded == 2
+        assert fake_s3.download_file.call_count == 2

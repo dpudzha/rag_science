@@ -2,6 +2,52 @@
 
 Question-answering over scientific papers using local LLMs. Combines FAISS vector search, BM25 keyword retrieval, and cross-encoder reranking for high-quality results. Runs entirely locally via [Ollama](https://ollama.com) — no cloud APIs or keys required.
 
+## Portfolio Snapshot
+
+`RAG Science` is a local-first Retrieval-Augmented Generation (RAG) platform for scientific documents. It ingests PDF/DOCX/XLSX files, performs hybrid retrieval (dense + keyword), reranks results with a cross-encoder, and returns grounded answers with citations.
+
+### Highlights
+
+- Hybrid retrieval with `FAISS` + `BM25`
+- Cross-encoder reranking for higher retrieval precision
+- Citation-aware responses (`source` + `page`)
+- FastAPI endpoints for querying, ingestion, sessions, and health checks
+- Agent mode with tool selection between document RAG and safe text-to-SQL
+- Local-only inference via Ollama
+- Evaluation framework for MRR/Recall@K and experiment comparison
+- Test suite status: **194 passed**
+
+### Architecture
+
+```mermaid
+flowchart TD
+    A[PDF / DOCX / XLSX Sources] --> B[Ingestion Pipeline<br/>parsers + chunking + metadata]
+    B --> C[Embeddings via Ollama]
+    B --> D[BM25 Index]
+    C --> E[FAISS Vector Index]
+
+    U[User Query<br/>CLI or API] --> Q[Query Orchestrator]
+    E --> R[Hybrid Retrieval]
+    D --> R
+    R --> X[Cross-Encoder Reranker]
+    X --> L[LLM Answer Generation]
+    L --> S[Cited Response<br/>answer + sources]
+
+    Q --> G{Agent Mode?}
+    G -- No --> R
+    G -- Yes --> T[RAG Agent]
+    T --> TR[RAG Tool]
+    T --> TS[SQL Tool]
+    TS --> DB[(SQLite Tables)]
+    TR --> R
+    DB --> TS
+
+    S --> API[FastAPI Endpoints<br/>/query /ingest /health]
+    B --> API
+
+    EVAL[Evaluation Suite<br/>MRR, Recall@K, experiments] --> Q
+```
+
 ## How It Works
 
 ```

@@ -1,5 +1,6 @@
 """FastAPI layer for the RAG Science pipeline."""
 import logging
+import threading
 import time
 from contextlib import asynccontextmanager
 
@@ -28,20 +29,25 @@ _query_resolver = None
 
 # --- Session storage: session_id -> {"history": [...], "last_access": timestamp} ---
 _sessions: dict[str, dict] = {}
+_qa_init_lock = threading.Lock()
+_sessions_lock = threading.RLock()
+_ingest_lock = threading.Lock()
 
 
 def _get_qa():
     """Lazy-load vectorstore, retriever, and QA chain (or agent) on first query."""
     global _qa_chain, _retriever, _agent
     if _qa_chain is None and _agent is None:
-        from query import load_vectorstore, build_retriever, build_qa_chain
-        vs = load_vectorstore()
-        _retriever = build_retriever(vs)
-        if ENABLE_SQL_AGENT:
-            from query import build_agent
-            _agent = build_agent(_retriever)
-        else:
-            _qa_chain = build_qa_chain(_retriever)
+        with _qa_init_lock:
+            if _qa_chain is None and _agent is None:
+                from query import load_vectorstore, build_retriever, build_qa_chain
+                vs = load_vectorstore()
+                _retriever = build_retriever(vs)
+                if ENABLE_SQL_AGENT:
+                    from query import build_agent
+                    _agent = build_agent(_retriever)
+                else:
+                    _qa_chain = build_qa_chain(_retriever)
     return _agent or _qa_chain
 
 
@@ -73,18 +79,87 @@ def _get_session_history(session_id: str | None) -> list:
         return []
 
     now = time.time()
+    with _sessions_lock:
+        # Evict expired sessions
+        expired = [
+            sid for sid, data in _sessions.items()
+            if now - data["last_access"] > SESSION_TTL_SECONDS
+        ]
+        for sid in expired:
+            _sessions.pop(sid, None)
 
-    # Evict expired sessions
-    expired = [sid for sid, data in _sessions.items()
-               if now - data["last_access"] > SESSION_TTL_SECONDS]
-    for sid in expired:
-        del _sessions[sid]
+        if session_id not in _sessions:
+            _sessions[session_id] = {"history": [], "last_access": now}
 
-    if session_id not in _sessions:
-        _sessions[session_id] = {"history": [], "last_access": now}
+        _sessions[session_id]["last_access"] = now
+        # Return a snapshot for read/use outside the session lock.
+        return list(_sessions[session_id]["history"])
 
-    _sessions[session_id]["last_access"] = now
-    return _sessions[session_id]["history"]
+
+def _append_session_history(session_id: str | None, question: str, answer: str) -> None:
+    """Append an exchange to session history in a threadsafe way."""
+    if session_id is None:
+        return
+    now = time.time()
+    with _sessions_lock:
+        session = _sessions.setdefault(session_id, {"history": [], "last_access": now})
+        session["history"].append((question, answer))
+        session["last_access"] = now
+
+
+def _extract_sources_from_result(result: dict | None) -> list["Source"]:
+    """Normalize source payloads from chain/agent output to API source models."""
+    if not result:
+        return []
+
+    seen: set[tuple[str, int | str]] = set()
+    sources: list[Source] = []
+
+    for doc in result.get("source_documents", []):
+        src = doc.metadata.get("source", "unknown")
+        page = doc.metadata.get("page", "?")
+        key = (src, page)
+        if key not in seen:
+            seen.add(key)
+            sources.append(Source(file=src, page=page))
+
+    for item in result.get("sources", []):
+        src = "unknown"
+        page: int | str = "?"
+        if isinstance(item, dict):
+            src = item.get("file") or item.get("source") or "unknown"
+            page = item.get("page", "?")
+        elif isinstance(item, (tuple, list)) and len(item) >= 2:
+            src = str(item[0])
+            page = item[1]
+        elif isinstance(item, str):
+            src = item
+
+        key = (src, page)
+        if key not in seen:
+            seen.add(key)
+            sources.append(Source(file=src, page=page))
+
+    return sources
+
+
+def _apply_query_preprocessing(question: str) -> str:
+    """Run query preprocessing with the shared retriever when available."""
+    if _retriever is None:
+        return question
+    from query import (
+        preprocess_query,
+        _get_archetype_detector,
+        _get_query_reformulator,
+        _get_metadata_extractor,
+    )
+    return preprocess_query(
+        question,
+        _retriever,
+        detector=_get_archetype_detector(),
+        reformulator=_get_query_reformulator(),
+        metadata_extractor=_get_metadata_extractor(),
+    )
 
 
 # --- Lifespan: health check on startup ---
@@ -189,14 +264,16 @@ def query(req: QueryRequest):
             result = _agent.invoke(resolved_question, chat_history=chat_history)
             answer = result.get("answer", "")
             tool_used = result.get("tool_used")
+            sources = _extract_sources_from_result(result)
 
-            if req.session_id is not None:
-                chat_history.append((req.question, answer))
+            _append_session_history(req.session_id, req.question, answer)
 
             return QueryResponse(
-                answer=answer, sources=[], session_id=req.session_id,
+                answer=answer, sources=sources, session_id=req.session_id,
                 tool_used=tool_used,
             )
+
+        processed_question = _apply_query_preprocessing(resolved_question)
 
         # Relevance checking with retry
         relevance_score = None
@@ -205,15 +282,15 @@ def query(req: QueryRequest):
             from relevance_checker import RelevanceChecker, retrieve_with_relevance_check
             checker = RelevanceChecker(threshold=RELEVANCE_THRESHOLD)
             _, rel_info = retrieve_with_relevance_check(
-                _retriever, resolved_question, checker,
+                _retriever, processed_question, checker,
                 max_retries=MAX_RETRIEVAL_RETRIES,
             )
             relevance_score = rel_info["score"]
             retry_count = rel_info["retry_count"]
             if rel_info["retry_count"] > 0:
-                resolved_question = rel_info["final_query"]
+                processed_question = _apply_query_preprocessing(rel_info["final_query"])
 
-        result = qa.invoke({"question": resolved_question, "chat_history": chat_history})
+        result = qa.invoke({"question": processed_question, "chat_history": chat_history})
     except ConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
     except Exception as e:
@@ -221,18 +298,9 @@ def query(req: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Query failed: {type(e).__name__}: {e}")
 
     # Update session history
-    if req.session_id is not None:
-        chat_history.append((req.question, result["answer"]))
+    _append_session_history(req.session_id, req.question, result["answer"])
 
-    seen = set()
-    sources = []
-    for doc in result["source_documents"]:
-        src = doc.metadata.get("source", "unknown")
-        page = doc.metadata.get("page", "?")
-        key = (src, page)
-        if key not in seen:
-            seen.add(key)
-            sources.append(Source(file=src, page=page))
+    sources = _extract_sources_from_result(result)
     return QueryResponse(
         answer=result["answer"], sources=sources, session_id=req.session_id,
         relevance_score=relevance_score, retry_count=retry_count,
@@ -242,26 +310,31 @@ def query(req: QueryRequest):
 @app.post("/ingest", response_model=IngestResponse)
 def ingest():
     global _qa_chain, _retriever, _agent
+    if not _ingest_lock.acquire(blocking=False):
+        raise HTTPException(status_code=409, detail="Ingestion already in progress")
     try:
         from ingest import ingest as run_ingest
         run_ingest()
         # Reset cached chain so next query picks up new documents
-        _qa_chain = None
-        _retriever = None
-        _agent = None
+        with _qa_init_lock:
+            _qa_chain = None
+            _retriever = None
+            _agent = None
         return IngestResponse(status="ok", detail="Ingestion complete")
     except ConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
     except Exception as e:
         logger.exception("Ingestion failed")
         raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        _ingest_lock.release()
 
 
 @app.delete("/sessions/{session_id}")
 def delete_session(session_id: str):
-    if session_id in _sessions:
-        del _sessions[session_id]
-        return {"status": "ok", "detail": f"Session '{session_id}' cleared"}
+    with _sessions_lock:
+        if _sessions.pop(session_id, None) is not None:
+            return {"status": "ok", "detail": f"Session '{session_id}' cleared"}
     raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found")
 
 

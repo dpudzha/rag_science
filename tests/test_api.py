@@ -1,4 +1,7 @@
 """Tests for api.py: endpoints, error responses, session management, validation."""
+import concurrent.futures
+import time
+import types
 import pytest
 from unittest.mock import patch, MagicMock
 
@@ -20,10 +23,12 @@ def reset_api_state():
     import api
     api._qa_chain = None
     api._retriever = None
+    api._agent = None
     api._sessions.clear()
     yield
     api._qa_chain = None
     api._retriever = None
+    api._agent = None
     api._sessions.clear()
 
 
@@ -88,6 +93,36 @@ class TestQueryEndpoint:
             resp = client.post("/query", json={"question": "test?"})
         assert resp.status_code == 503
 
+    def test_query_retry_reprocesses_final_query(self, client):
+        mock_chain = MagicMock()
+        mock_chain.invoke.return_value = {"answer": "Retry answer", "source_documents": []}
+        mock_retriever = MagicMock()
+        fake_rel_module = types.SimpleNamespace(
+            RelevanceChecker=MagicMock(return_value=object()),
+            retrieve_with_relevance_check=MagicMock(return_value=([], {
+                "score": 0.4,
+                "is_relevant": False,
+                "retry_count": 1,
+                "final_query": "rewritten question",
+            })),
+        )
+
+        with (
+            patch.dict("sys.modules", {"relevance_checker": fake_rel_module}),
+            patch("api._get_qa", return_value=mock_chain),
+            patch("api.RELEVANCE_CHECK_ENABLED", True),
+            patch("api._retriever", mock_retriever),
+            patch("api._apply_query_preprocessing",
+                  side_effect=lambda q: f"processed::{q}") as preprocess_mock,
+        ):
+            resp = client.post("/query", json={"question": "original question"})
+
+        assert resp.status_code == 200
+        assert preprocess_mock.call_args_list[0].args == ("original question",)
+        assert preprocess_mock.call_args_list[1].args == ("rewritten question",)
+        invoke_payload = mock_chain.invoke.call_args.args[0]
+        assert invoke_payload["question"] == "processed::rewritten question"
+
 
 class TestSessionManagement:
     def test_query_with_session_id(self, client):
@@ -121,6 +156,27 @@ class TestSessionManagement:
         resp = client.delete("/sessions/nope")
         assert resp.status_code == 404
 
+    def test_delete_session_concurrent_calls_are_safe(self):
+        import api
+
+        api._sessions["sess-1"] = {"history": [("q", "a")], "last_access": time.time()}
+
+        def _delete():
+            try:
+                return api.delete_session("sess-1")
+            except Exception as exc:
+                return exc
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+            results = list(executor.map(lambda _: _delete(), range(8)))
+
+        successes = [r for r in results if isinstance(r, dict) and r.get("status") == "ok"]
+        not_found = [r for r in results if getattr(r, "status_code", None) == 404]
+        unexpected = [r for r in results if r not in successes and r not in not_found]
+        assert len(successes) == 1
+        assert len(not_found) == 7
+        assert not unexpected
+
 
 class TestIngestEndpoint:
     def test_ingest_success(self, client):
@@ -135,3 +191,80 @@ class TestIngestEndpoint:
         with patch("ingest.ingest", side_effect=ConnectionError("offline")):
             resp = client.post("/ingest")
         assert resp.status_code == 503
+
+    def test_ingest_conflict_when_already_running(self, client):
+        import api
+
+        acquired = api._ingest_lock.acquire(blocking=False)
+        assert acquired
+        try:
+            resp = client.post("/ingest")
+        finally:
+            api._ingest_lock.release()
+
+        assert resp.status_code == 409
+        assert "already in progress" in resp.json()["detail"].lower()
+
+
+class TestConcurrencySafety:
+    def test_get_qa_lazy_initialization_thread_safe(self):
+        import api
+
+        sentinel_chain = object()
+        calls = {"load": 0, "retriever": 0, "chain": 0}
+
+        def _slow_vectorstore():
+            calls["load"] += 1
+            time.sleep(0.03)
+            return "vs"
+
+        def _build_retriever(_):
+            calls["retriever"] += 1
+            return "retriever"
+
+        def _build_qa_chain(_):
+            calls["chain"] += 1
+            return sentinel_chain
+
+        fake_query_module = types.SimpleNamespace(
+            load_vectorstore=_slow_vectorstore,
+            build_retriever=_build_retriever,
+            build_qa_chain=_build_qa_chain,
+        )
+
+        with (
+            patch("api.ENABLE_SQL_AGENT", False),
+            patch.dict("sys.modules", {"query": fake_query_module}),
+        ):
+            with concurrent.futures.ThreadPoolExecutor(max_workers=12) as executor:
+                results = list(executor.map(lambda _: api._get_qa(), range(12)))
+
+        assert all(r is sentinel_chain for r in results)
+        assert calls["load"] == 1
+        assert calls["retriever"] == 1
+        assert calls["chain"] == 1
+
+
+class TestAgentSources:
+    def test_sql_agent_response_includes_sources_when_available(self, client):
+        import api
+
+        mock_agent = MagicMock()
+        mock_agent.invoke.return_value = {
+            "answer": "Agent answer",
+            "tool_used": "sql_tool",
+            "sources": [{"file": "table.csv", "page": "row:1"}],
+        }
+
+        with (
+            patch("api.ENABLE_SQL_AGENT", True),
+            patch("api._agent", mock_agent),
+            patch("api._get_qa", return_value=mock_agent),
+        ):
+            resp = client.post("/query", json={"question": "sql question"})
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["answer"] == "Agent answer"
+        assert body["tool_used"] == "sql_tool"
+        assert body["sources"] == [{"file": "table.csv", "page": "row:1"}]

@@ -42,6 +42,14 @@ class TestLoadBm25:
             assert load_bm25() is None
 
 
+class TestLoadVectorstore:
+    def test_raises_when_missing(self, tmp_vectorstore):
+        with patch("query.VECTORSTORE_DIR", str(tmp_vectorstore)):
+            from query import load_vectorstore, VectorstoreNotFoundError
+            with pytest.raises(VectorstoreNotFoundError):
+                load_vectorstore()
+
+
 class TestLoadParentChunks:
     def test_load_when_exists(self, tmp_vectorstore, sample_documents):
         pkl_path = tmp_vectorstore / "parent_chunks.pkl"
@@ -84,6 +92,16 @@ class TestHybridRetrieverDocKey:
         key = HybridRetriever._doc_key(doc)
         assert key.startswith("test.pdf:1:")
         assert len(key.split(":", 2)[2]) <= 200
+
+    def test_public_get_relevant_documents_delegates(self):
+        from query import HybridRetriever
+        retriever = MagicMock(spec=HybridRetriever)
+        expected = [Document(page_content="test", metadata={})]
+        retriever._get_relevant_documents.return_value = expected
+
+        result = HybridRetriever.get_relevant_documents(retriever, "query")
+        assert result == expected
+        retriever._get_relevant_documents.assert_called_once_with("query")
 
 
 class TestRelevanceCheckerIntegration:

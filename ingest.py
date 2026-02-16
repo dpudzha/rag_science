@@ -57,7 +57,25 @@ def load_ingest_record() -> dict:
 
 
 def save_ingest_record(record: dict):
-    Path(INGEST_RECORD).write_text(json.dumps(record, indent=2))
+    _write_json_atomic(Path(INGEST_RECORD), record)
+
+
+def _write_json_atomic(path: Path, payload: dict):
+    """Atomically write a JSON file in the same directory as its destination."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w",
+        dir=str(path.parent),
+        prefix=f".{path.name}.tmp.",
+        suffix=".json",
+        delete=False,
+        encoding="utf-8",
+    ) as tmp:
+        json.dump(payload, tmp, indent=2)
+        tmp.flush()
+        os.fsync(tmp.fileno())
+        tmp_path = tmp.name
+    os.replace(tmp_path, path)
 
 
 def extract_text_from_pdf(pdf_path: str) -> dict:
@@ -331,7 +349,9 @@ def save_bm25(bm25: BM25Okapi, docs: list[Document], directory: str):
     logger.info("BM25 index saved to %s", bm25_path)
 
 
-def build_vectorstore(chunks, existing_store=None) -> FAISS:
+def build_vectorstore(chunks, existing_store=None) -> FAISS | None:
+    if not chunks:
+        return existing_store
     embeddings = get_embeddings()
     new_store = FAISS.from_documents(chunks, embeddings)
     if existing_store:
@@ -340,10 +360,16 @@ def build_vectorstore(chunks, existing_store=None) -> FAISS:
     return new_store
 
 
-def _save_vectorstore_atomic(store: FAISS, bm25: BM25Okapi, bm25_docs: list[Document],
-                             parent_chunks: list[Document] | None = None):
+def _save_vectorstore_atomic(
+    store: FAISS,
+    bm25: BM25Okapi,
+    bm25_docs: list[Document],
+    parent_chunks: list[Document] | None = None,
+    ingest_record: dict | None = None,
+):
     """Save vectorstore, BM25 index, and optionally parent chunks atomically."""
     dest = Path(VECTORSTORE_DIR)
+    dest.parent.mkdir(parents=True, exist_ok=True)
     tmp_dir = tempfile.mkdtemp(dir=dest.parent, prefix="vectorstore.tmp.")
 
     try:
@@ -355,10 +381,22 @@ def _save_vectorstore_atomic(store: FAISS, bm25: BM25Okapi, bm25_docs: list[Docu
             with open(parents_path, "wb") as f:
                 pickle.dump(parent_chunks, f)
 
-        # Preserve ingested.json if it exists in current vectorstore
-        ingest_record = Path(INGEST_RECORD)
-        if ingest_record.exists():
-            shutil.copy2(str(ingest_record), os.path.join(tmp_dir, "ingested.json"))
+        ingest_record_path = Path(INGEST_RECORD)
+        resolved_dest = dest.resolve(strict=False)
+        resolved_ingest = ingest_record_path.resolve(strict=False)
+        ingest_under_vectorstore = (
+            resolved_ingest == resolved_dest
+            or resolved_dest in resolved_ingest.parents
+        )
+
+        if ingest_record is not None and ingest_under_vectorstore:
+            relative_ingest = resolved_ingest.relative_to(resolved_dest)
+            _write_json_atomic(Path(tmp_dir) / relative_ingest, ingest_record)
+        elif ingest_record is None and ingest_record_path.exists() and ingest_under_vectorstore:
+            relative_ingest = resolved_ingest.relative_to(resolved_dest)
+            target = Path(tmp_dir) / relative_ingest
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(str(ingest_record_path), str(target))
 
         # Atomic swap: rename old dir, rename tmp to target, remove old
         backup = None
@@ -368,6 +406,15 @@ def _save_vectorstore_atomic(store: FAISS, bm25: BM25Okapi, bm25_docs: list[Docu
         os.rename(tmp_dir, str(dest))
         if backup and Path(backup).exists():
             shutil.rmtree(backup)
+
+        # If ingest record is configured outside VECTORSTORE_DIR, swap + record cannot
+        # be done in one rename operation. Use atomic file replacement as best effort.
+        if ingest_record is not None and not ingest_under_vectorstore:
+            logger.warning(
+                "INGEST_RECORD is outside VECTORSTORE_DIR; updating separately at %s",
+                ingest_record_path,
+            )
+            _write_json_atomic(ingest_record_path, ingest_record)
 
         logger.info("Vectorstore atomically saved to %s", dest)
     except Exception:
@@ -464,6 +511,9 @@ def ingest():
     if not docs:
         logger.info("Nothing new to ingest.")
         return
+    updated_record = load_ingest_record()
+    for doc in docs:
+        updated_record[doc["hash"]] = doc["source"]
 
     # Save large tables to SQLite and get description chunks for vectorstore
     table_description_chunks = _save_large_tables_to_sql(large_tables)
@@ -474,6 +524,10 @@ def ingest():
         parent_chunks, child_chunks = chunk_documents_child(docs)
         child_chunks.extend(table_description_chunks)
         store = build_vectorstore(child_chunks, existing)
+        if store is None:
+            logger.info("No chunks generated; skipping vectorstore update.")
+            save_ingest_record(updated_record)
+            return
         # Combine all docs for BM25 (use parent chunks for better keyword matching)
         all_parents = parent_chunks
         if existing:
@@ -484,19 +538,24 @@ def ingest():
                 all_parents = existing_parents + parent_chunks
         all_store_docs = _get_all_docs_from_store(store)
         bm25, bm25_docs = build_bm25(all_store_docs)
-        _save_vectorstore_atomic(store, bm25, bm25_docs, all_parents)
+        _save_vectorstore_atomic(
+            store, bm25, bm25_docs, all_parents, ingest_record=updated_record
+        )
     else:
         chunks = chunk_documents(docs)
         chunks.extend(table_description_chunks)
+        if not chunks:
+            logger.info("No chunks generated; skipping vectorstore update.")
+            save_ingest_record(updated_record)
+            return
         store = build_vectorstore(chunks, existing)
+        if store is None:
+            logger.info("No vectorstore available; skipping vectorstore update.")
+            save_ingest_record(updated_record)
+            return
         all_docs = _get_all_docs_from_store(store)
         bm25, bm25_docs = build_bm25(all_docs)
-        _save_vectorstore_atomic(store, bm25, bm25_docs)
-
-    record = load_ingest_record()
-    for doc in docs:
-        record[doc["hash"]] = doc["source"]
-    save_ingest_record(record)
+        _save_vectorstore_atomic(store, bm25, bm25_docs, ingest_record=updated_record)
 
 
 if __name__ == "__main__":

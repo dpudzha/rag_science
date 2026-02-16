@@ -1,4 +1,5 @@
 """Tests for sql_database.py."""
+import importlib
 import pytest
 import pandas as pd
 
@@ -72,3 +73,32 @@ class TestSQLDatabase:
 
     def test_empty_db_table_names(self, db):
         assert db.get_table_names() == []
+
+
+class TestSQLDatabaseDefaultPath:
+    def test_default_path_falls_back_to_vectorstore_dir(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("VECTORSTORE_DIR", str(tmp_path / "vs"))
+        monkeypatch.setenv("SQL_DATABASE_PATH", "")
+
+        import config
+        import sql_database
+
+        importlib.reload(config)
+        importlib.reload(sql_database)
+
+        db = sql_database.SQLDatabase()
+        assert db._db_path == str(tmp_path / "vs" / "tables.db")
+
+    def test_default_path_uses_sql_database_path_when_set(self, tmp_path, monkeypatch):
+        explicit_db = tmp_path / "custom" / "tables.sqlite"
+        monkeypatch.setenv("VECTORSTORE_DIR", str(tmp_path / "vs"))
+        monkeypatch.setenv("SQL_DATABASE_PATH", str(explicit_db))
+
+        import config
+        import sql_database
+
+        importlib.reload(config)
+        importlib.reload(sql_database)
+
+        db = sql_database.SQLDatabase()
+        assert db._db_path == str(explicit_db)

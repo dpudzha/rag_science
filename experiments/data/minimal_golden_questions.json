@@ -1,0 +1,37 @@
+[
+  {
+    "question": "What does retrieval-augmented generation combine?",
+    "answer": "It combines document retrieval with language generation.",
+    "evidence_snippets": [
+      "Retrieval-augmented generation combines document retrieval with language generation"
+    ]
+  },
+  {
+    "question": "How can cosine similarity be implemented in FAISS retrieval?",
+    "answer": "Cosine similarity can be implemented by L2-normalizing vectors and using inner product search.",
+    "evidence_snippets": [
+      "Cosine similarity can be implemented by L2-normalizing vectors and using inner product search"
+    ]
+  },
+  {
+    "question": "What does Recall@k measure?",
+    "answer": "Recall@k measures how many relevant chunks are retrieved in the top k results.",
+    "evidence_snippets": [
+      "Recall at k measures how many relevant chunks are retrieved in top k"
+    ]
+  },
+  {
+    "question": "What does high precision with low recall indicate?",
+    "answer": "It indicates focused but incomplete retrieval.",
+    "evidence_snippets": [
+      "High precision with low recall indicates focused but incomplete retrieval"
+    ]
+  },
+  {
+    "question": "What should experiment tracking record?",
+    "answer": "It should record chunk size, embedding model, and retrieval parameters.",
+    "evidence_snippets": [
+      "Experiment tracking should record chunk size, embedding model, and retrieval parameters"
+    ]
+  }
+]

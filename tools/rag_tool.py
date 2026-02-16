@@ -21,8 +21,25 @@ class RAGTool(BaseTool):
 
     model_config = {"arbitrary_types_allowed": True}
 
+    def _retrieve_docs(self, query: str) -> list:
+        """Retrieve docs across retriever interface variants."""
+        invoke = getattr(self.retriever, "invoke", None)
+        if callable(invoke):
+            return invoke(query)
+
+        get_relevant_documents = getattr(self.retriever, "get_relevant_documents", None)
+        if callable(get_relevant_documents):
+            return get_relevant_documents(query)
+
+        legacy_get_relevant_documents = getattr(self.retriever, "_get_relevant_documents", None)
+        if callable(legacy_get_relevant_documents):
+            return legacy_get_relevant_documents(query)
+
+        logger.error("Retriever does not expose a supported retrieval interface")
+        return []
+
     def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
-        docs = self.retriever.invoke(query)
+        docs = self._retrieve_docs(query)
         if not docs:
             return "No relevant documents found for this query."
 

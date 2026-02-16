@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from config import VECTORSTORE_DIR
+from config import SQL_DATABASE_PATH, VECTORSTORE_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +15,11 @@ _UNSAFE_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-DEFAULT_DB_PATH = Path(VECTORSTORE_DIR) / "tables.db"
+DEFAULT_DB_PATH = (
+    Path(SQL_DATABASE_PATH).expanduser()
+    if SQL_DATABASE_PATH.strip()
+    else Path(VECTORSTORE_DIR) / "tables.db"
+)
 
 
 class SQLDatabase:

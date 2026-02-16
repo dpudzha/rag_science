@@ -1,0 +1,17 @@
+[
+  {
+    "doc_id": "doc_1",
+    "source": "rag_basics.txt",
+    "text": "Retrieval-augmented generation combines document retrieval with language generation. A user question is converted into a vector representation. The retriever compares that vector to indexed chunk embeddings. The highest-scoring chunks are selected as context for generation. This reduces hallucinations by grounding responses in source text. Chunking strategy strongly affects retrieval quality. Very large chunks may dilute signal with irrelevant details. Very small chunks may lose context needed for complete answers. Hybrid retrieval can combine semantic vectors with keyword matching. Evaluation should measure both retrieval quality and answer quality."
+  },
+  {
+    "doc_id": "doc_2",
+    "source": "faiss_notes.txt",
+    "text": "FAISS is a library for efficient similarity search over dense vectors. It supports exact indexes such as IndexFlatIP and approximate indexes such as IVF. Cosine similarity can be implemented by L2-normalizing vectors and using inner product search. The index stores vectors and returns nearest neighbors for each query vector. Search quality and latency depend on the index type and hyperparameters. Metadata is typically stored outside the FAISS index and joined by vector position. Retrieval pipelines often rerank FAISS results with a cross-encoder model. Batch embedding can significantly reduce indexing time. Persisting both index and metadata is required for reproducibility."
+  },
+  {
+    "doc_id": "doc_3",
+    "source": "eval_guidelines.txt",
+    "text": "A golden dataset should include questions, trusted answers, and evidence references. Evidence references can be represented as relevant chunk identifiers. Recall at k measures how many relevant chunks are retrieved in top k. Precision at k measures how many retrieved chunks are truly relevant. High recall with low precision indicates broad but noisy retrieval. High precision with low recall indicates focused but incomplete retrieval. Experiment tracking should record chunk size, embedding model, and retrieval parameters. Comparing runs across consistent metrics enables systematic optimization. Small controlled datasets are useful before scaling to production corpora. Iteration should change one variable at a time whenever possible."
+  }
+]

@@ -44,6 +44,10 @@ _TOKEN_RE = re.compile(r"[a-z0-9]+")
 _cross_encoder: CrossEncoder | None = None
 
 
+class VectorstoreNotFoundError(FileNotFoundError):
+    """Raised when the FAISS vectorstore is missing from disk."""
+
+
 def _get_cross_encoder() -> CrossEncoder:
     global _cross_encoder
     if _cross_encoder is None:
@@ -166,12 +170,20 @@ class HybridRetriever(BaseRetriever):
 
         return top_docs
 
+    def get_relevant_documents(self, query: str, **kwargs) -> list[Document]:
+        """Public retrieval interface for direct callers and legacy integrations."""
+        return self._get_relevant_documents(query, **kwargs)
+
 
 def load_vectorstore() -> FAISS:
     index_path = Path(VECTORSTORE_DIR) / "index.faiss"
     if not index_path.exists():
-        logger.error("No vectorstore found at %s/. Run 'python ingest.py' first to ingest PDFs.", VECTORSTORE_DIR)
-        sys.exit(1)
+        message = (
+            f"No vectorstore found at {VECTORSTORE_DIR}/. "
+            "Run 'python ingest.py' first to ingest PDFs."
+        )
+        logger.error(message)
+        raise VectorstoreNotFoundError(message)
     embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=OLLAMA_BASE_URL)
     return FAISS.load_local(VECTORSTORE_DIR, embeddings, allow_dangerous_deserialization=True)
 

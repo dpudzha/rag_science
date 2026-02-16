@@ -47,6 +47,7 @@ MAX_RETRIEVAL_RETRIES = int(os.getenv("MAX_RETRIEVAL_RETRIES", "1"))
 
 # Agent / SQL
 ENABLE_SQL_AGENT = os.getenv("ENABLE_SQL_AGENT", "false").lower() == "true"
+# Optional explicit SQLite path. If empty, defaults to VECTORSTORE_DIR/tables.db.
 SQL_DATABASE_PATH = os.getenv("SQL_DATABASE_PATH", "")
 AGENT_MAX_ITERATIONS = int(os.getenv("AGENT_MAX_ITERATIONS", "5"))
 

@@ -26,7 +26,6 @@ class TestRAGTool:
         result = tool._run("test query")
         assert "No relevant documents" in result
 
-
 class TestSQLTool:
     def test_returns_results(self, tmp_path):
         import pandas as pd
@@ -71,3 +70,84 @@ class TestSQLTool:
         tool = SQLTool(db=db)
         result = tool._run("What data is available?")
         assert "No tabular data" in result
+
+
+class TestRAGAgent:
+    def test_invoke_builds_fresh_executor_per_call(self):
+        from agent import RAGAgent
+
+        retriever = MagicMock()
+        agent = RAGAgent(retriever=retriever, llm=MagicMock())
+
+        executor_a = MagicMock()
+        executor_a.invoke.return_value = {
+            "output": "Answer A",
+            "intermediate_steps": [],
+            "source_documents": [],
+        }
+        executor_b = MagicMock()
+        executor_b.invoke.return_value = {
+            "output": "Answer B",
+            "intermediate_steps": [],
+            "source_documents": [],
+        }
+
+        with patch.object(agent, "_build_executor", side_effect=[executor_a, executor_b]) as build_exec:
+            result_a = agent.invoke("Question A")
+            result_b = agent.invoke("Question B")
+
+        assert build_exec.call_count == 2
+        assert result_a["answer"] == "Answer A"
+        assert result_b["answer"] == "Answer B"
+
+    def test_fallback_supports_legacy_retriever_interface(self):
+        from agent import RAGAgent
+
+        class LegacyRetriever:
+            def get_relevant_documents(self, query):
+                return [
+                    Document(
+                        page_content=f"Legacy match for {query}",
+                        metadata={"source": "legacy.pdf", "page": 3},
+                    )
+                ]
+
+        agent = RAGAgent(retriever=LegacyRetriever(), llm=MagicMock())
+        broken_executor = MagicMock()
+        broken_executor.invoke.side_effect = RuntimeError("agent failed")
+
+        with patch.object(agent, "_build_executor", return_value=broken_executor):
+            result = agent.invoke("legacy question")
+
+        assert result["tool_used"] == "fallback_rag"
+        assert len(result["source_documents"]) == 1
+        assert result["source_documents"][0].metadata["source"] == "legacy.pdf"
+        assert "Legacy match for legacy question" in result["answer"]
+
+    def test_invoke_returns_deduplicated_source_documents(self):
+        from agent import RAGAgent
+
+        retriever = MagicMock()
+        agent = RAGAgent(retriever=retriever, llm=MagicMock())
+
+        tool_action = MagicMock()
+        tool_action.tool = "search_papers"
+
+        doc_a = Document(page_content="Same content", metadata={"source": "a.pdf", "page": 1})
+        doc_a_dup = Document(page_content="Same content", metadata={"source": "a.pdf", "page": 1})
+        doc_b = Document(page_content="Other content", metadata={"source": "b.pdf", "page": 2})
+
+        executor = MagicMock()
+        executor.invoke.return_value = {
+            "output": "Combined answer",
+            "intermediate_steps": [(tool_action, "observation")],
+            "source_documents": [doc_a, doc_a_dup, doc_b],
+        }
+
+        with patch.object(agent, "_build_executor", return_value=executor):
+            result = agent.invoke("question")
+
+        assert result["answer"] == "Combined answer"
+        assert result["tool_used"] == "search_papers"
+        assert "intermediate_steps" in result
+        assert len(result["source_documents"]) == 2

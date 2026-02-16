@@ -233,3 +233,59 @@ class TestSaveLargeTablesToSql:
         assert "Year" in content
         assert "Revenue" in content
         assert "2020" in content  # sample row
+
+
+class TestIngestFlow:
+    def test_ingest_skips_vectorstore_build_when_no_chunks(self):
+        import ingest
+
+        docs = [{
+            "hash": "newhash",
+            "source": "empty.pdf",
+            "pages": [{"text": " ", "page": 1}],
+            "title": "Empty",
+        }]
+
+        with patch("health.check_ollama"), \
+             patch("ingest.load_new_documents", return_value=(docs, [])), \
+             patch("ingest.load_ingest_record", return_value={}), \
+             patch("ingest._save_large_tables_to_sql", return_value=[]), \
+             patch("ingest.load_existing_vectorstore", return_value=None), \
+             patch("ingest.chunk_documents", return_value=[]), \
+             patch("ingest.build_vectorstore") as mock_build_vectorstore, \
+             patch("ingest.save_ingest_record") as mock_save_ingest_record:
+            ingest.ingest()
+
+        mock_build_vectorstore.assert_not_called()
+        mock_save_ingest_record.assert_called_once_with({"newhash": "empty.pdf"})
+
+    def test_ingest_passes_updated_record_into_atomic_swap(self, sample_documents):
+        import ingest
+
+        docs = [{
+            "hash": "newhash",
+            "source": "paper.pdf",
+            "pages": [{"text": "content", "page": 1}],
+            "title": "Paper",
+        }]
+        fake_store = object()
+
+        with patch("health.check_ollama"), \
+             patch("ingest.load_new_documents", return_value=(docs, [])), \
+             patch("ingest.load_ingest_record", return_value={"oldhash": "old.pdf"}), \
+             patch("ingest._save_large_tables_to_sql", return_value=[]), \
+             patch("ingest.load_existing_vectorstore", return_value=None), \
+             patch("ingest.chunk_documents", return_value=sample_documents), \
+             patch("ingest.build_vectorstore", return_value=fake_store), \
+             patch("ingest._get_all_docs_from_store", return_value=sample_documents), \
+             patch("ingest.build_bm25", return_value=(MagicMock(), sample_documents)), \
+             patch("ingest._save_vectorstore_atomic") as mock_save_atomic, \
+             patch("ingest.save_ingest_record") as mock_save_ingest_record:
+            ingest.ingest()
+
+        assert mock_save_atomic.call_count == 1
+        assert mock_save_atomic.call_args.kwargs["ingest_record"] == {
+            "oldhash": "old.pdf",
+            "newhash": "paper.pdf",
+        }
+        mock_save_ingest_record.assert_not_called()

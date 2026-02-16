@@ -52,7 +52,7 @@ def tokenize(text: str) -> list[str]:
 
 
 def file_hash(path: str) -> str:
-    return hashlib.md5(Path(path).read_bytes()).hexdigest()
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
 def load_ingest_record() -> dict:

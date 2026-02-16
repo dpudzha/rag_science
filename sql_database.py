@@ -11,7 +11,8 @@ from config import SQL_DATABASE_PATH, VECTORSTORE_DIR
 logger = logging.getLogger(__name__)
 
 _UNSAFE_PATTERN = re.compile(
-    r"\b(DROP|DELETE|UPDATE|INSERT|ALTER|CREATE|TRUNCATE|REPLACE|EXEC|EXECUTE)\b",
+    r"\b(DROP|DELETE|UPDATE|INSERT|ALTER|CREATE|TRUNCATE|REPLACE|EXEC|EXECUTE"
+    r"|ATTACH|DETACH|PRAGMA|LOAD_EXTENSION|SAVEPOINT|RELEASE|REINDEX|VACUUM)\b",
     re.IGNORECASE,
 )
 
@@ -29,12 +30,15 @@ class SQLDatabase:
         self._db_path = str(db_path or DEFAULT_DB_PATH)
         Path(self._db_path).parent.mkdir(parents=True, exist_ok=True)
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self, readonly: bool = True) -> sqlite3.Connection:
+        if readonly and Path(self._db_path).exists():
+            uri = f"file:{self._db_path}?mode=ro"
+            return sqlite3.connect(uri, uri=True)
         return sqlite3.connect(self._db_path)
 
     def create_table_from_dataframe(self, table_name: str, df: pd.DataFrame):
         """Create a table from a pandas DataFrame, replacing if exists."""
-        conn = self._connect()
+        conn = self._connect(readonly=False)
         try:
             df.to_sql(table_name, conn, if_exists="replace", index=False)
             logger.info("Created table '%s' with %d rows", table_name, len(df))
@@ -46,7 +50,7 @@ class SQLDatabase:
         sql = sql.strip().rstrip(";")
 
         if _UNSAFE_PATTERN.search(sql):
-            raise ValueError(f"Unsafe SQL operation detected. Only SELECT queries are allowed.")
+            raise ValueError("Unsafe SQL operation detected. Only SELECT queries are allowed.")
 
         if not sql.upper().startswith("SELECT"):
             raise ValueError("Only SELECT queries are allowed.")
@@ -62,28 +66,21 @@ class SQLDatabase:
 
     def get_schema(self) -> str:
         """Return schema information for all tables."""
+        tables = self.get_table_names()
+        if not tables:
+            return "No tables found."
         conn = self._connect()
         try:
-            cursor = conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
-            )
-            tables = [row[0] for row in cursor.fetchall()]
-
             schema_parts = []
-            for table in tables:
-                cursor = conn.execute(f"PRAGMA table_info('{table}')")
-                columns = cursor.fetchall()
-                col_defs = [f"  {col[1]} {col[2]}" for col in columns]
-
-                # Get row count
-                count_cursor = conn.execute(f"SELECT COUNT(*) FROM '{table}'")
-                row_count = count_cursor.fetchone()[0]
-
-                schema_parts.append(
-                    f"Table: {table} ({row_count} rows)\n" + "\n".join(col_defs)
+            for table_name in tables:
+                cursor = conn.execute(
+                    "SELECT sql FROM sqlite_master WHERE type='table' AND name=?",
+                    (table_name,),
                 )
-
-            return "\n\n".join(schema_parts) if schema_parts else "No tables found."
+                row = cursor.fetchone()
+                if row and row[0]:
+                    schema_parts.append(row[0])
+            return "\n\n".join(schema_parts)
         finally:
             conn.close()
 
@@ -100,4 +97,5 @@ class SQLDatabase:
 
     def get_sample_rows(self, table_name: str, limit: int = 3) -> list[dict]:
         """Return sample rows from a table."""
-        return self.execute_query(f"SELECT * FROM '{table_name}' LIMIT {limit}")
+        safe_name = table_name.replace('"', '""')
+        return self.execute_query(f'SELECT * FROM "{safe_name}" LIMIT {limit}')

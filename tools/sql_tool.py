@@ -1,13 +1,10 @@
 """Text-to-SQL tool for querying tabular data via natural language."""
 import logging
-from typing import Optional
+from typing import Any, Optional
 
-from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_core.tools import BaseTool
 from langchain_core.callbacks import CallbackManagerForToolRun
-
-from config import OLLAMA_BASE_URL, LLM_MODEL
 from sql_database import SQLDatabase
 
 logger = logging.getLogger(__name__)
@@ -26,9 +23,7 @@ Rules:
 - Use single quotes for string literals
 - Output ONLY the SQL query, no explanation
 
-Question: {question}
-
-SQL:"""
+The user's question follows. Respond with only the SQL query:"""
 
 
 class SQLTool(BaseTool):
@@ -41,13 +36,14 @@ class SQLTool(BaseTool):
         "tables or spreadsheets. Input should be a natural language question about the data."
     )
     db: SQLDatabase
-    llm: object = None
+    llm: Any = None  # ChatOllama | None
 
     model_config = {"arbitrary_types_allowed": True}
 
     def _get_llm(self):
         if self.llm is None:
-            self.llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0)
+            from utils import get_default_llm
+            self.llm = get_default_llm()
         return self.llm
 
     def _run(self, query: str, run_manager: Optional[CallbackManagerForToolRun] = None) -> str:
@@ -62,14 +58,16 @@ class SQLTool(BaseTool):
             if rows:
                 samples += f"\n{table_name}: {rows}"
 
-        prompt = (_SQL_GENERATION_PROMPT
-                  .replace("{schema}", schema)
-                  .replace("{samples}", samples)
-                  .replace("{question}", query))
+        system_prompt = (_SQL_GENERATION_PROMPT
+                         .replace("{schema}", schema)
+                         .replace("{samples}", samples))
 
         llm = self._get_llm()
         try:
-            response = llm.invoke([HumanMessage(content=prompt)])
+            response = llm.invoke([
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=query),
+            ])
             sql = response.content.strip()
             # Clean up: remove markdown code blocks if present
             if sql.startswith("```"):

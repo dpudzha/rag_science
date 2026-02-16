@@ -32,6 +32,8 @@ _sessions: dict[str, dict] = {}
 _qa_init_lock = threading.Lock()
 _sessions_lock = threading.RLock()
 _ingest_lock = threading.Lock()
+MAX_SESSIONS = 100
+MAX_HISTORY_LENGTH = 20
 
 
 def _get_qa():
@@ -89,6 +91,9 @@ def _get_session_history(session_id: str | None) -> list:
             _sessions.pop(sid, None)
 
         if session_id not in _sessions:
+            if len(_sessions) >= MAX_SESSIONS:
+                oldest = min(_sessions, key=lambda s: _sessions[s]["last_access"])
+                _sessions.pop(oldest, None)
             _sessions[session_id] = {"history": [], "last_access": now}
 
         _sessions[session_id]["last_access"] = now
@@ -104,6 +109,8 @@ def _append_session_history(session_id: str | None, question: str, answer: str) 
     with _sessions_lock:
         session = _sessions.setdefault(session_id, {"history": [], "last_access": now})
         session["history"].append((question, answer))
+        if len(session["history"]) > MAX_HISTORY_LENGTH:
+            session["history"] = session["history"][-MAX_HISTORY_LENGTH:]
         session["last_access"] = now
 
 
@@ -295,7 +302,7 @@ def query(req: QueryRequest):
         raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
     except Exception as e:
         logger.exception("Unexpected error during query")
-        raise HTTPException(status_code=500, detail=f"Query failed: {type(e).__name__}: {e}")
+        raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
 
     # Update session history
     _append_session_history(req.session_id, req.question, result["answer"])
@@ -325,7 +332,7 @@ def ingest():
         raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
     except Exception as e:
         logger.exception("Ingestion failed")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Ingestion failed. Check server logs.")
     finally:
         _ingest_lock.release()
 

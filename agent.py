@@ -3,11 +3,10 @@ import logging
 from pathlib import Path
 from collections.abc import Iterable
 
-from langchain_ollama import ChatOllama
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_classic.agents import AgentExecutor, create_tool_calling_agent
 
-from config import OLLAMA_BASE_URL, LLM_MODEL
+from utils import get_default_llm
 from sql_database import SQLDatabase
 from tools.rag_tool import RAGTool
 from tools.sql_tool import SQLTool
@@ -21,10 +20,8 @@ _SYSTEM_PROMPT = _SYSTEM_PROMPT_PATH.read_text()
 class RAGAgent:
     """Agent that selects between RAG search and SQL query tools."""
 
-    def __init__(self, retriever, max_iterations: int = 5, llm: ChatOllama | None = None):
-        self._llm = llm or ChatOllama(
-            model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0
-        )
+    def __init__(self, retriever, max_iterations: int = 5, llm=None):
+        self._llm = llm or get_default_llm()
         self._retriever = retriever
         self._max_iterations = max_iterations
 

@@ -24,4 +24,4 @@ Query: "What methods were used in the attention paper from 2020?"
 Query: "What is the accuracy of the transformer model?"
 {{"dates": null, "authors": null, "papers": null, "sources": null}}
 
-Query: {query}
+Extract metadata from the following user query:

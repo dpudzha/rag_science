@@ -175,6 +175,14 @@ class HybridRetriever(BaseRetriever):
         return self._get_relevant_documents(query, **kwargs)
 
 
+class PreloadedRetriever(BaseRetriever):
+    """Wrapper that returns pre-fetched docs instead of re-retrieving."""
+    docs: list[Document]
+
+    def _get_relevant_documents(self, query: str, **kwargs) -> list[Document]:
+        return self.docs
+
+
 def load_vectorstore() -> FAISS:
     index_path = Path(VECTORSTORE_DIR) / "index.faiss"
     if not index_path.exists():

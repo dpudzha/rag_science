@@ -3,10 +3,9 @@ import logging
 import re
 from pathlib import Path
 
-from langchain_ollama import ChatOllama
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
-from config import OLLAMA_BASE_URL, LLM_MODEL
+from utils import get_default_llm
 
 logger = logging.getLogger(__name__)
 
@@ -54,10 +53,8 @@ _CHITCHAT_PATTERNS = re.compile(
 class IntentClassifier:
     """Classifies user queries as GREETING, CHITCHAT, or SUBSTANTIVE using an LLM."""
 
-    def __init__(self, llm: ChatOllama | None = None):
-        self._llm = llm or ChatOllama(
-            model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0
-        )
+    def __init__(self, llm=None):
+        self._llm = llm or get_default_llm()
 
     @staticmethod
     def _fast_classify(query: str) -> str | None:
@@ -78,9 +75,11 @@ class IntentClassifier:
             logger.info("Intent classified as %s (fast) for query: %s", fast_result, query[:80])
             return fast_result
 
-        prompt = _PROMPT_TEMPLATE.replace("{query}", query)
         try:
-            response = self._llm.invoke([HumanMessage(content=prompt)])
+            response = self._llm.invoke([
+                SystemMessage(content=_PROMPT_TEMPLATE),
+                HumanMessage(content=query),
+            ])
             intent = response.content.strip().split("\n")[0].strip().upper()
             if intent in INTENTS:
                 logger.info("Intent classified as %s for query: %s", intent, query[:80])

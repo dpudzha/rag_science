@@ -26,7 +26,14 @@ RERANK_MODEL = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
 
 # CORS
-CORS_ORIGINS = os.getenv("CORS_ORIGINS", "*").split(",")
+CORS_ORIGINS = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://localhost:3000,http://localhost:8000",
+    ).split(",")
+    if origin.strip()
+]
 
 # Intent classification
 INTENT_CLASSIFICATION_ENABLED = os.getenv("INTENT_CLASSIFICATION_ENABLED", "true").lower() == "true"

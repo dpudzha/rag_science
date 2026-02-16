@@ -3,11 +3,10 @@ import json
 import logging
 from pathlib import Path
 
-from langchain_ollama import ChatOllama
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, SystemMessage
 
-from config import OLLAMA_BASE_URL, LLM_MODEL
+from utils import get_default_llm
 
 logger = logging.getLogger(__name__)
 
@@ -18,16 +17,16 @@ _PROMPT_TEMPLATE = _PROMPT_PATH.read_text()
 class MetadataExtractor:
     """Extracts structured metadata (dates, authors, papers, sources) from queries."""
 
-    def __init__(self, llm: ChatOllama | None = None):
-        self._llm = llm or ChatOllama(
-            model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0
-        )
+    def __init__(self, llm=None):
+        self._llm = llm or get_default_llm()
 
     def extract(self, query: str) -> dict:
         """Extract metadata from a query. Returns dict with dates/authors/papers/sources."""
-        prompt = _PROMPT_TEMPLATE.replace("{query}", query)
         try:
-            response = self._llm.invoke([HumanMessage(content=prompt)])
+            response = self._llm.invoke([
+                SystemMessage(content=_PROMPT_TEMPLATE),
+                HumanMessage(content=query),
+            ])
             text = response.content.strip()
             # Try to find JSON in the response
             start = text.find("{")
@@ -43,7 +42,7 @@ class MetadataExtractor:
                 }
                 logger.info("Extracted metadata: %s", result)
                 return result
-        except (json.JSONDecodeError, Exception) as e:
+        except Exception as e:
             logger.warning("Metadata extraction failed (%s), returning empty", e)
         return {"dates": None, "authors": None, "papers": None, "sources": None}
 

@@ -1,5 +1,6 @@
 """Tests for sql_database.py."""
 import importlib
+import sqlite3
 import pytest
 import pandas as pd
 
@@ -62,7 +63,7 @@ class TestSQLDatabase:
         schema = db_with_table.get_schema()
         assert "results" in schema
         assert "method" in schema
-        assert "3 rows" in schema
+        assert "TEXT" in schema or "REAL" in schema
 
     def test_get_sample_rows(self, db_with_table):
         rows = db_with_table.get_sample_rows("results", limit=2)
@@ -102,3 +103,40 @@ class TestSQLDatabaseDefaultPath:
 
         db = sql_database.SQLDatabase()
         assert db._db_path == str(explicit_db)
+
+
+class TestSQLBlocklist:
+    """Test that dangerous SQL operations beyond basic DML are blocked."""
+
+    def test_rejects_attach(self, db_with_table):
+        with pytest.raises(ValueError, match="Unsafe SQL"):
+            db_with_table.execute_query("ATTACH DATABASE ':memory:' AS other")
+
+    def test_rejects_pragma(self, db_with_table):
+        with pytest.raises(ValueError, match="Unsafe SQL|Only SELECT"):
+            db_with_table.execute_query("PRAGMA table_info(results)")
+
+    def test_rejects_load_extension(self, db_with_table):
+        with pytest.raises(ValueError, match="Unsafe SQL"):
+            db_with_table.execute_query("SELECT LOAD_EXTENSION('evil.so')")
+
+
+class TestReadOnlyConnection:
+    """Test that read-only connections reject writes."""
+
+    def test_readonly_connection_rejects_writes(self, db_with_table):
+        conn = db_with_table._connect(readonly=True)
+        try:
+            with pytest.raises(sqlite3.OperationalError):
+                conn.execute("INSERT INTO results VALUES ('X', 1, 2)")
+        finally:
+            conn.close()
+
+    def test_readonly_connection_allows_reads(self, db_with_table):
+        conn = db_with_table._connect(readonly=True)
+        try:
+            cursor = conn.execute("SELECT COUNT(*) FROM results")
+            count = cursor.fetchone()[0]
+            assert count == 3
+        finally:
+            conn.close()

@@ -1,7 +1,5 @@
 You are evaluating whether retrieved documents are relevant to a user's question.
 
-Question: {query}
-
 Retrieved documents:
 {documents}
 
@@ -17,3 +15,5 @@ If the score is below 0.6, also suggest a reformulated query that might retrieve
 Respond in this exact format:
 SCORE: <number between 0.0 and 1.0>
 SUGGESTION: <reformulated query or "none">
+
+The user's question follows.

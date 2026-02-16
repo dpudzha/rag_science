@@ -13,3 +13,4 @@ httpx
 python-docx
 openpyxl
 boto3
+pandas

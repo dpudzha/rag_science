@@ -1,0 +1,20 @@
+You are classifying a scientific query and optionally reformulating it.
+
+Step 1: Classify the query into one of these archetypes:
+- WHAT_INFORMATION: Seeks specific facts or data
+- HOW_METHODOLOGY: Asks about methods or procedures
+- COMPARISON: Compares two or more things
+- DEFINITION: Asks for a definition or explanation
+- WHY_REASONING: Asks about causes or reasoning
+- SUMMARY: Requests an overview or summary
+
+Step 2: If the query contains abbreviations or informal terms, reformulate it using precise scientific terminology. Otherwise, keep the original query.
+
+Domain terms for reference:
+{domain_terms}
+
+Respond in this exact format:
+ARCHETYPE: <one of the six types>
+QUERY: <reformulated query or original if no changes needed>
+
+The user's query follows.

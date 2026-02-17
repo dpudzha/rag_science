@@ -10,7 +10,6 @@ import shutil
 import tempfile
 from datetime import datetime, timedelta, timezone
 
-import fitz
 from pathlib import Path
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -62,7 +61,7 @@ def load_ingest_record() -> dict:
     return {}
 
 
-def save_ingest_record(record: dict):
+def save_ingest_record(record: dict) -> None:
     _write_json_atomic(Path(INGEST_RECORD), record)
 
 
@@ -82,44 +81,6 @@ def _write_json_atomic(path: Path, payload: dict):
         os.fsync(tmp.fileno())
         tmp_path = tmp.name
     os.replace(tmp_path, path)
-
-
-def extract_text_from_pdf(pdf_path: str) -> dict:
-    pages = []
-    title = None
-    creation_date = None
-    authors = None
-    with fitz.open(pdf_path) as doc:
-        # Extract PDF metadata
-        pdf_meta = doc.metadata
-        if pdf_meta:
-            creation_date = pdf_meta.get("creationDate", "")
-            authors = pdf_meta.get("author", "")
-
-        for page_num, page in enumerate(doc, start=1):
-            text = page.get_text("text")
-            if text.strip():
-                pages.append({"text": text, "page": page_num})
-                if title is None:
-                    title = _extract_title(text)
-    resolved_title = title or Path(pdf_path).stem
-    markdown_pages = _markdownify_pages(pages, resolved_title)
-    return {
-        "pages": markdown_pages,
-        "source": Path(pdf_path).name,
-        "title": resolved_title,
-        "creation_date": creation_date or "",
-        "authors": authors or "",
-    }
-
-
-def _extract_title(first_page_text: str) -> str | None:
-    """Extract paper title from the first page (first non-empty line, heuristic)."""
-    for line in first_page_text.split("\n"):
-        line = line.strip()
-        if len(line) > 10 and not line.startswith("http"):
-            return line
-    return None
 
 
 def _to_markdown_lines(text: str) -> str:
@@ -179,29 +140,6 @@ def _detect_section_header(text: str) -> str | None:
     return None
 
 
-def load_new_pdfs(folder: str) -> list[dict]:
-    pdfs = list(Path(folder).rglob("*.pdf"))
-    record = load_ingest_record()
-    logger.info("Found %d PDFs total", len(pdfs))
-
-    docs = []
-    for pdf_path in pdfs:
-        h = file_hash(str(pdf_path))
-        if h in record:
-            logger.info("  - %s (already ingested, skipping)", pdf_path.name)
-            continue
-        try:
-            doc = extract_text_from_pdf(str(pdf_path))
-            doc["hash"] = h
-            docs.append(doc)
-            logger.info("  + %s (new)", doc["source"])
-        except Exception as e:
-            logger.warning("  ! %s: %s", pdf_path.name, e)
-
-    logger.info("%d new PDFs to ingest", len(docs))
-    return docs
-
-
 def load_new_documents(folder: str) -> tuple[list[dict], list[dict]]:
     """Load new documents of all supported formats.
 
@@ -238,7 +176,9 @@ def load_new_documents(folder: str) -> tuple[list[dict], list[dict]]:
         try:
             ext = file_path.suffix.lower()
             if ext == ".pdf":
+                from parsers.pdf_parser import extract_text_from_pdf
                 doc = extract_text_from_pdf(str(file_path))
+                doc["pages"] = _markdownify_pages(doc["pages"], doc["title"])
                 # Extract tables from PDFs if enabled
                 if ENABLE_TABLE_EXTRACTION:
                     from parsers.table_extractor import TableExtractor
@@ -445,7 +385,7 @@ def build_bm25(docs: list[Document]) -> tuple[BM25Okapi, list[Document]]:
     return bm25, docs
 
 
-def save_bm25(bm25: BM25Okapi, docs: list[Document], directory: str):
+def save_bm25(bm25: BM25Okapi, docs: list[Document], directory: str) -> None:
     """Save BM25 index and document list to disk."""
     bm25_path = Path(directory) / "bm25_index.pkl"
     with open(bm25_path, "wb") as f:
@@ -549,7 +489,7 @@ def _save_vectorstore_atomic(
         raise
 
 
-def load_existing_vectorstore():
+def load_existing_vectorstore() -> FAISS | None:
     index_path = Path(VECTORSTORE_DIR) / "index.faiss"
     if index_path.exists():
         return FAISS.load_local(
@@ -627,7 +567,7 @@ def _save_large_tables_to_sql(large_tables: list[dict]) -> list[Document]:
     return description_chunks
 
 
-def ingest():
+def ingest() -> None:
     from health import check_ollama
     check_ollama()
 

@@ -22,7 +22,7 @@ BM25_WEIGHT = float(os.getenv("BM25_WEIGHT", "0.3"))
 DENSE_WEIGHT = float(os.getenv("DENSE_WEIGHT", "0.7"))
 
 # Reranking
-RERANK_MODEL = os.getenv("RERANK_MODEL", "cross-encoder/ms-marco-MiniLM-L-6-v2")
+RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
 
 # Session management
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
@@ -44,13 +44,13 @@ INTENT_CLASSIFICATION_ENABLED = os.getenv("INTENT_CLASSIFICATION_ENABLED", "true
 ARCHETYPE_DETECTION_ENABLED = os.getenv("ARCHETYPE_DETECTION_ENABLED", "true").lower() == "true"
 QUERY_REFORMULATION_ENABLED = os.getenv("QUERY_REFORMULATION_ENABLED", "true").lower() == "true"
 QUERY_RESOLUTION_ENABLED = os.getenv("QUERY_RESOLUTION_ENABLED", "true").lower() == "true"
-DOMAIN_TERMINOLOGY_PATH = os.getenv("DOMAIN_TERMINOLOGY_PATH", "")
 
 # Metadata extraction
 METADATA_EXTRACTION_ENABLED = os.getenv("METADATA_EXTRACTION_ENABLED", "true").lower() == "true"
 
 # Relevance checking
 RELEVANCE_CHECK_ENABLED = os.getenv("RELEVANCE_CHECK_ENABLED", "true").lower() == "true"
+USE_CROSS_ENCODER_RELEVANCE = os.getenv("USE_CROSS_ENCODER_RELEVANCE", "true").lower() == "true"
 RELEVANCE_THRESHOLD = float(os.getenv("RELEVANCE_THRESHOLD", "0.6"))
 MAX_RETRIEVAL_RETRIES = int(os.getenv("MAX_RETRIEVAL_RETRIES", "1"))
 

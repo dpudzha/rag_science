@@ -1,5 +1,6 @@
 """Relevance checking and query retry for retrieval results."""
 import logging
+import math
 import re
 from pathlib import Path
 
@@ -20,9 +21,10 @@ _SUGGESTION_RE = re.compile(r"SUGGESTION:\s*(.+)", re.IGNORECASE)
 class RelevanceChecker:
     """Scores the relevance of retrieved documents against a query."""
 
-    def __init__(self, llm=None, threshold: float = 0.6):
+    def __init__(self, llm=None, threshold: float = 0.6, use_cross_encoder_score: bool = True):
         self._llm = llm or get_default_llm()
         self.threshold = threshold
+        self.use_cross_encoder_score = use_cross_encoder_score
 
     def check(self, query: str, docs: list[Document]) -> dict:
         """Score relevance and optionally suggest reformulation.
@@ -75,6 +77,23 @@ class RelevanceChecker:
             logger.warning("Relevance check failed (%s), assuming relevant", e)
             return {"score": 1.0, "is_relevant": True, "suggestion": None}
 
+    def check_from_score(self, score: float) -> dict:
+        """Convert a cross-encoder logit score to a relevance result (no LLM call).
+
+        Cross-encoder scores are logits (~-10 to +10), so apply sigmoid to
+        normalize to 0-1 before comparing to threshold.
+        """
+        normalized = 1.0 / (1.0 + math.exp(-score))
+        is_relevant = normalized >= self.threshold
+        logger.info("Cross-encoder relevance proxy: raw=%.3f, normalized=%.3f "
+                     "(threshold: %.2f, relevant: %s)",
+                     score, normalized, self.threshold, is_relevant)
+        return {
+            "score": normalized,
+            "is_relevant": is_relevant,
+            "suggestion": None,
+        }
+
 
 def retrieve_with_relevance_check(retriever, query: str, checker: RelevanceChecker,
                                    max_retries: int = 1) -> tuple[list[Document], dict]:
@@ -90,7 +109,14 @@ def retrieve_with_relevance_check(retriever, query: str, checker: RelevanceCheck
 
     for attempt in range(1 + max_retries):
         docs = retriever.invoke(current_query)
-        result = checker.check(current_query, docs)
+
+        # Use cross-encoder score as relevance proxy when available
+        ce_score = getattr(retriever, "last_top_rerank_score", None)
+        _used_cross_encoder = ce_score is not None and checker.use_cross_encoder_score
+        if _used_cross_encoder:
+            result = checker.check_from_score(ce_score)
+        else:
+            result = checker.check(current_query, docs)
 
         if result["is_relevant"] or attempt >= max_retries:
             return docs, {
@@ -100,14 +126,18 @@ def retrieve_with_relevance_check(retriever, query: str, checker: RelevanceCheck
                 "final_query": current_query,
             }
 
-        # Retry with suggested reformulation
         if result["suggestion"]:
             logger.info("Relevance low (%.2f), retrying with: %s",
                         result["score"], result["suggestion"])
             current_query = result["suggestion"]
             retry_count += 1
+        elif _used_cross_encoder:
+            # Cross-encoder proxy has no suggestion — retry with original query
+            logger.info("Relevance low (%.2f), retrying with original query",
+                        result["score"])
+            retry_count += 1
         else:
-            # No suggestion, return current results
+            # LLM check with no suggestion — return current results
             return docs, {
                 "score": result["score"],
                 "is_relevant": result["is_relevant"],

@@ -12,6 +12,7 @@ from config import (
     MAX_RETRIEVAL_RETRIES,
     ENABLE_SQL_AGENT,
     AGENT_MAX_ITERATIONS,
+    USE_CROSS_ENCODER_RELEVANCE,
 )
 from retriever import (
     HybridRetriever,
@@ -24,13 +25,13 @@ from retriever import (
 logger = logging.getLogger(__name__)
 
 
-def build_agent(retriever: HybridRetriever):
+def build_agent(retriever: HybridRetriever) -> "RAGAgent":
     """Build a RAG agent with tool selection (RAG + optional SQL)."""
     from agent import RAGAgent
     return RAGAgent(retriever=retriever, max_iterations=AGENT_MAX_ITERATIONS)
 
 
-def print_result(result: dict):
+def print_result(result: dict) -> None:
     print(f"\nAnswer:\n{result['answer']}\n")
     seen = set()
     pages = []
@@ -88,7 +89,8 @@ def _get_relevance_checker():
     if not RELEVANCE_CHECK_ENABLED:
         return None
     from relevance_checker import RelevanceChecker
-    return RelevanceChecker(threshold=RELEVANCE_THRESHOLD)
+    return RelevanceChecker(threshold=RELEVANCE_THRESHOLD,
+                            use_cross_encoder_score=USE_CROSS_ENCODER_RELEVANCE)
 
 
 def preprocess_query(question: str, retriever: HybridRetriever,
@@ -177,7 +179,7 @@ def _run_pipeline(
     return result
 
 
-def interactive():
+def interactive() -> None:
     from health import check_ollama
     check_ollama()
 
@@ -217,7 +219,7 @@ def interactive():
             chat_history.append((question, result["answer"]))
 
 
-def ask(question: str):
+def ask(question: str) -> None:
     from health import check_ollama
     check_ollama()
 

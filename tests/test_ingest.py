@@ -166,17 +166,17 @@ class TestTokenize:
 
 class TestExtractTitle:
     def test_extracts_first_long_line(self):
-        from ingest import _extract_title
+        from parsers.pdf_parser import _extract_title
         text = "Short\nThis is a long enough title for extraction\nOther text"
         assert _extract_title(text) == "This is a long enough title for extraction"
 
     def test_skips_urls(self):
-        from ingest import _extract_title
+        from parsers.pdf_parser import _extract_title
         text = "http://example.com/paper\nActual Paper Title Here"
         assert _extract_title(text) == "Actual Paper Title Here"
 
     def test_returns_none_for_short_text(self):
-        from ingest import _extract_title
+        from parsers.pdf_parser import _extract_title
         assert _extract_title("Hi\nBye") is None
 
 

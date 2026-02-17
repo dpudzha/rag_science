@@ -4,13 +4,15 @@ from pathlib import Path
 
 import pandas as pd
 
+from parsers import DocumentDict
+
 logger = logging.getLogger(__name__)
 
 
 class XLSXParser:
     """Parse XLSX files into the standard document dict format."""
 
-    def parse(self, path: str) -> dict:
+    def parse(self, path: str) -> DocumentDict:
         xlsx = pd.ExcelFile(path)
         pages = []
         tables = []

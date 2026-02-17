@@ -36,11 +36,11 @@ class SQLTool(BaseTool):
         "tables or spreadsheets. Input should be a natural language question about the data."
     )
     db: SQLDatabase
-    llm: Any = None  # ChatOllama | None
+    llm: Any = None  # langchain_ollama.ChatOllama | None (Pydantic needs runtime type)
 
     model_config = {"arbitrary_types_allowed": True}
 
-    def _get_llm(self):
+    def _get_llm(self) -> Any:
         if self.llm is None:
             from utils import get_default_llm
             self.llm = get_default_llm()

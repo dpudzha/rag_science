@@ -12,7 +12,7 @@ from config import (
     OLLAMA_BASE_URL, SESSION_TTL_SECONDS, CORS_ORIGINS,
     INTENT_CLASSIFICATION_ENABLED, ENABLE_SQL_AGENT,
     RELEVANCE_CHECK_ENABLED, RELEVANCE_THRESHOLD, MAX_RETRIEVAL_RETRIES,
-    QUERY_RESOLUTION_ENABLED,
+    QUERY_RESOLUTION_ENABLED, USE_CROSS_ENCODER_RELEVANCE,
 )
 from health import check_ollama
 from logging_config import setup_logging
@@ -242,7 +242,7 @@ class HealthResponse(BaseModel):
 
 # --- Endpoints ---
 @app.post("/query", response_model=QueryResponse)
-def query(req: QueryRequest):
+def query(req: QueryRequest) -> QueryResponse:
     # Intent classification: skip RAG for greetings/chitchat
     classifier = _get_intent_classifier()
     if classifier:
@@ -277,7 +277,8 @@ def query(req: QueryRequest):
         retry_count = None
         if RELEVANCE_CHECK_ENABLED and request_retriever is not None:
             from relevance_checker import RelevanceChecker, retrieve_with_relevance_check
-            checker = RelevanceChecker(threshold=RELEVANCE_THRESHOLD)
+            checker = RelevanceChecker(threshold=RELEVANCE_THRESHOLD,
+                                       use_cross_encoder_score=USE_CROSS_ENCODER_RELEVANCE)
             _, rel_info = retrieve_with_relevance_check(
                 request_retriever, processed_question, checker,
                 max_retries=MAX_RETRIEVAL_RETRIES,
@@ -321,7 +322,7 @@ def query(req: QueryRequest):
 
 
 @app.post("/ingest", response_model=IngestResponse)
-def ingest():
+def ingest() -> IngestResponse:
     global _qa_chain, _retriever, _agent
     if not _ingest_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Ingestion already in progress")
@@ -344,7 +345,7 @@ def ingest():
 
 
 @app.delete("/sessions/{session_id}")
-def delete_session(session_id: str):
+def delete_session(session_id: str) -> dict:
     with _sessions_lock:
         if _sessions.pop(session_id, None) is not None:
             return {"status": "ok", "detail": f"Session '{session_id}' cleared"}
@@ -352,7 +353,7 @@ def delete_session(session_id: str):
 
 
 @app.get("/health", response_model=HealthResponse)
-def health():
+def health() -> HealthResponse:
     try:
         check_ollama(retries=1, delay=0)
         ollama_status = "ok"

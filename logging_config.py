@@ -17,7 +17,7 @@ QUIET_LOGGERS = [
 ]
 
 
-def setup_logging(level: int = logging.INFO):
+def setup_logging(level: int = logging.INFO) -> None:
     logging.basicConfig(level=level, format=LOG_FORMAT)
     for name in QUIET_LOGGERS:
         logging.getLogger(name).setLevel(logging.WARNING)

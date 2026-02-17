@@ -5,13 +5,15 @@ from pathlib import Path
 from docx import Document as DocxDocument
 from docx.table import Table
 
+from parsers import DocumentDict
+
 logger = logging.getLogger(__name__)
 
 
 class DOCXParser:
     """Parse DOCX files into the standard document dict format."""
 
-    def parse(self, path: str) -> dict:
+    def parse(self, path: str) -> DocumentDict:
         doc = DocxDocument(path)
         pages = []
         tables = []

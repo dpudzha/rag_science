@@ -17,7 +17,7 @@ class RAGTool(BaseTool):
         "about research papers, methods, results, and findings. Input should be a "
         "research question or search query."
     )
-    retriever: Any  # HybridRetriever (can't import due to circular dep)
+    retriever: Any  # retriever.HybridRetriever (Pydantic needs runtime type)
 
     model_config = {"arbitrary_types_allowed": True}
 

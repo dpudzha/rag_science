@@ -104,6 +104,58 @@ class TestHybridRetrieverDocKey:
         retriever._get_relevant_documents.assert_called_once_with("query")
 
 
+class TestHybridRetrieverRerankerScore:
+    def test_last_top_rerank_score_set_after_retrieval(self):
+        from retriever import HybridRetriever
+        from langchain_community.vectorstores import FAISS
+        from sentence_transformers import CrossEncoder
+        import numpy as np
+
+        mock_vs = MagicMock(spec=FAISS)
+        mock_vs.similarity_search_with_score.return_value = [
+            (Document(page_content="doc1", metadata={"source": "a.pdf", "page": 1}), 0.9),
+            (Document(page_content="doc2", metadata={"source": "b.pdf", "page": 1}), 0.8),
+        ]
+
+        mock_bm25 = MagicMock(spec=BM25Okapi)
+        mock_bm25.get_scores.return_value = np.array([0.5, 0.3])
+
+        bm25_docs = [
+            Document(page_content="doc1", metadata={"source": "a.pdf", "page": 1}),
+            Document(page_content="doc2", metadata={"source": "b.pdf", "page": 1}),
+        ]
+
+        mock_ce = MagicMock(spec=CrossEncoder)
+        mock_ce.predict.return_value = np.array([3.5, -1.0])
+
+        retriever = HybridRetriever(
+            vectorstore=mock_vs, bm25=mock_bm25, bm25_docs=bm25_docs,
+            cross_encoder=mock_ce, k=2, k_candidates=10,
+        )
+        retriever._get_relevant_documents("test query")
+        assert retriever.last_top_rerank_score == pytest.approx(3.5)
+
+    def test_last_top_rerank_score_zero_when_no_candidates(self):
+        from retriever import HybridRetriever
+        from langchain_community.vectorstores import FAISS
+        from sentence_transformers import CrossEncoder
+
+        mock_vs = MagicMock(spec=FAISS)
+        mock_vs.similarity_search_with_score.return_value = []
+
+        mock_bm25 = MagicMock(spec=BM25Okapi)
+        mock_bm25.get_scores.return_value = []
+
+        mock_ce = MagicMock(spec=CrossEncoder)
+
+        retriever = HybridRetriever(
+            vectorstore=mock_vs, bm25=mock_bm25, bm25_docs=[],
+            cross_encoder=mock_ce, k=2, k_candidates=10,
+        )
+        retriever._get_relevant_documents("test query")
+        assert retriever.last_top_rerank_score == 0.0
+
+
 class TestPreloadedRetriever:
     def test_returns_cached_docs(self):
         from retriever import PreloadedRetriever

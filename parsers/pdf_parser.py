@@ -3,6 +3,8 @@ from pathlib import Path
 
 import fitz
 
+from parsers import DocumentDict
+
 
 def _extract_title(first_page_text: str) -> str | None:
     """Extract paper title from the first page (first non-empty line, heuristic)."""
@@ -13,7 +15,7 @@ def _extract_title(first_page_text: str) -> str | None:
     return None
 
 
-def extract_text_from_pdf(pdf_path: str) -> dict:
+def extract_text_from_pdf(pdf_path: str) -> DocumentDict:
     pages = []
     title = None
     creation_date = None
@@ -43,5 +45,5 @@ def extract_text_from_pdf(pdf_path: str) -> dict:
 class PDFParser:
     """Parse PDF files into the standard document dict format."""
 
-    def parse(self, path: str) -> dict:
+    def parse(self, path: str) -> DocumentDict:
         return extract_text_from_pdf(path)

@@ -53,6 +53,7 @@ provided paper excerpts. Use ONLY the context below to answer. Be precise and \
 use technical terminology appropriate to the field.
 
 Rules:
+- Always respond in English.
 - If the context does not contain enough information to answer, say "I don't \
 have enough information in the provided papers to answer this."
 - Cite specific findings, numbers, and methodologies from the context.
@@ -78,6 +79,7 @@ class HybridRetriever(BaseRetriever):
     cross_encoder: CrossEncoder
     parent_chunks: list[Document] | None = None
     metadata_filters: dict | None = None
+    last_top_rerank_score: float = 0.0
     k: int = TOP_K
     k_candidates: int = TOP_K_CANDIDATES
     bm25_weight: float = BM25_WEIGHT
@@ -134,12 +136,14 @@ class HybridRetriever(BaseRetriever):
         candidates = [doc_map[key] for key in ranked[:self.k_candidates]]
 
         if not candidates:
+            self.last_top_rerank_score = 0.0
             return []
 
         # Cross-encoder reranking
         pairs = [[query, doc.page_content] for doc in candidates]
         rerank_scores = self.cross_encoder.predict(pairs, show_progress_bar=False)
         reranked = sorted(zip(candidates, rerank_scores), key=lambda x: x[1], reverse=True)
+        self.last_top_rerank_score = float(reranked[0][1])
 
         # Apply metadata filters BEFORE final k-slice
         filtered = [doc for doc, _ in reranked]
@@ -242,7 +246,7 @@ def build_retriever(vectorstore: FAISS) -> HybridRetriever:
     )
 
 
-def build_qa_chain(retriever: HybridRetriever):
+def build_qa_chain(retriever: HybridRetriever) -> ConversationalRetrievalChain:
     llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0)
     return ConversationalRetrievalChain.from_llm(
         llm=llm,

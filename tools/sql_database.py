@@ -36,7 +36,7 @@ class SQLDatabase:
             return sqlite3.connect(uri, uri=True)
         return sqlite3.connect(self._db_path)
 
-    def create_table_from_dataframe(self, table_name: str, df: pd.DataFrame):
+    def create_table_from_dataframe(self, table_name: str, df: pd.DataFrame) -> None:
         """Create a table from a pandas DataFrame, replacing if exists."""
         conn = self._connect(readonly=False)
         try:

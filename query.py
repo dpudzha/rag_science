@@ -31,8 +31,9 @@ def build_agent(retriever: HybridRetriever) -> "RAGAgent":
     return RAGAgent(retriever=retriever, max_iterations=AGENT_MAX_ITERATIONS)
 
 
-def print_result(result: dict) -> None:
-    print(f"\nAnswer:\n{result['answer']}\n")
+def print_result(result: dict, answer_already_printed: bool = False) -> None:
+    if not answer_already_printed:
+        print(f"\nAnswer:\n{result['answer']}\n")
     seen = set()
     pages = []
     for doc in result["source_documents"]:
@@ -131,10 +132,13 @@ def _run_pipeline(
     relevance_checker=None,
     query_resolver=None,
     domain_terms: dict | None = None,
+    streaming: bool = False,
 ) -> dict | None:
     """Core query pipeline shared by ask() and interactive().
 
     Returns result dict, or None if the query was handled (e.g. greeting).
+    When streaming=True, prints answer tokens as they arrive and returns a
+    synthetic result dict with the accumulated answer and source_documents.
     """
     # Intent classification: skip RAG for greetings/chitchat
     if classifier:
@@ -154,7 +158,12 @@ def _run_pipeline(
         resolved, retriever, detector, meta_extractor, domain_terms,
     )
 
+    # Show reformulated query when it differs from original
+    if processed != resolved:
+        print(f"  [Reformulated: {processed}]")
+
     # Relevance checking with retry
+    docs = None
     if relevance_checker:
         from relevance_checker import retrieve_with_relevance_check
         docs, rel_info = retrieve_with_relevance_check(
@@ -169,6 +178,30 @@ def _run_pipeline(
 
     if agent is not None:
         result = agent.invoke(processed, chat_history=chat_history)
+    elif streaming:
+        # Stream the LLM directly — ConversationalRetrievalChain.stream()
+        # does not yield incremental tokens, so we bypass the chain.
+        from langchain_ollama import ChatOllama
+        from config import OLLAMA_BASE_URL, LLM_MODEL
+        from retriever import QA_PROMPT
+
+        if docs is None:
+            docs = retriever.invoke(processed)
+
+        context = "\n\n".join(doc.page_content for doc in docs)
+        prompt = QA_PROMPT.format(context=context, question=processed)
+
+        llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL,
+                         temperature=0, streaming=True)
+        full_answer = []
+        print("\nAnswer:")
+        for chunk in llm.stream(prompt):
+            token = chunk.content
+            if token:
+                print(token, end="", flush=True)
+                full_answer.append(token)
+        print("\n")  # newline after streaming
+        result = {"answer": "".join(full_answer), "source_documents": docs}
     else:
         result = qa.invoke({"question": processed, "chat_history": chat_history})
 
@@ -185,8 +218,10 @@ def interactive() -> None:
 
     vectorstore = load_vectorstore()
     retriever = build_retriever(vectorstore)
+    # Non-streaming chain kept as fallback for agent path
     qa = None if ENABLE_SQL_AGENT else build_qa_chain(retriever)
     agent = build_agent(retriever) if ENABLE_SQL_AGENT else None
+    streaming = not ENABLE_SQL_AGENT
     chat_history = []
     classifier = _get_intent_classifier()
     detector = _get_archetype_detector()
@@ -213,9 +248,10 @@ def interactive() -> None:
             relevance_checker=relevance_checker,
             query_resolver=query_resolver,
             domain_terms=domain_terms,
+            streaming=streaming,
         )
         if result:
-            print_result(result)
+            print_result(result, answer_already_printed=streaming)
             chat_history.append((question, result["answer"]))
 
 
@@ -227,6 +263,7 @@ def ask(question: str) -> None:
     retriever = build_retriever(vectorstore)
     qa = None if ENABLE_SQL_AGENT else build_qa_chain(retriever)
     agent = build_agent(retriever) if ENABLE_SQL_AGENT else None
+    streaming = not ENABLE_SQL_AGENT
 
     result = _run_pipeline(
         question, retriever, qa, agent,
@@ -236,9 +273,10 @@ def ask(question: str) -> None:
         meta_extractor=_get_metadata_extractor(),
         relevance_checker=_get_relevance_checker(),
         domain_terms=_get_domain_terminology(),
+        streaming=streaming,
     )
     if result:
-        print_result(result)
+        print_result(result, answer_already_printed=streaming)
 
 
 if __name__ == "__main__":

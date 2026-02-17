@@ -1,4 +1,5 @@
 """FastAPI layer for the RAG Science pipeline."""
+import json
 import logging
 import threading
 import time
@@ -6,15 +7,17 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 
 from config import (
-    OLLAMA_BASE_URL, SESSION_TTL_SECONDS, CORS_ORIGINS,
+    OLLAMA_BASE_URL, LLM_MODEL, SESSION_TTL_SECONDS, CORS_ORIGINS,
     INTENT_CLASSIFICATION_ENABLED, ENABLE_SQL_AGENT,
     RELEVANCE_CHECK_ENABLED, RELEVANCE_THRESHOLD, MAX_RETRIEVAL_RETRIES,
     QUERY_RESOLUTION_ENABLED, USE_CROSS_ENCODER_RELEVANCE,
 )
 from health import check_ollama
+from langchain_ollama import ChatOllama
 from logging_config import setup_logging
 
 setup_logging()
@@ -319,6 +322,156 @@ def query(req: QueryRequest) -> QueryResponse:
         answer=result["answer"], sources=sources, session_id=req.session_id,
         relevance_score=relevance_score, retry_count=retry_count,
     )
+
+
+def _extract_sources_from_docs(docs) -> list["Source"]:
+    """Extract deduplicated sources from a list of LangChain Documents."""
+    seen: set[tuple[str, int | str]] = set()
+    sources: list[Source] = []
+    for doc in docs:
+        src = doc.metadata.get("source", "unknown")
+        page = doc.metadata.get("page", "?")
+        key = (src, page)
+        if key not in seen:
+            seen.add(key)
+            sources.append(Source(file=src, page=page))
+    return sources
+
+
+def _format_sse(event: str, data: dict) -> str:
+    """Format a Server-Sent Event."""
+    return f"event: {event}\ndata: {json.dumps(data)}\n\n"
+
+
+@app.post("/query/stream")
+async def query_stream(req: QueryRequest):
+    """Stream the answer via Server-Sent Events.
+
+    Runs all pre-generation pipeline stages (intent, archetype, retrieval,
+    relevance check), emits a metadata event with sources, then streams
+    answer tokens incrementally.
+    """
+    # Intent classification: short-circuit for greetings/chitchat
+    classifier = _get_intent_classifier()
+    if classifier:
+        intent = classifier.classify(req.question)
+        response = classifier.get_chitchat_response(intent)
+        if response:
+            async def _chitchat_stream():
+                yield _format_sse("metadata", {
+                    "sources": [], "session_id": req.session_id,
+                })
+                yield _format_sse("token", {"token": response})
+                yield _format_sse("done", {})
+            return StreamingResponse(
+                _chitchat_stream(), media_type="text/event-stream",
+            )
+
+    # Agent path: not supported for streaming
+    if ENABLE_SQL_AGENT:
+        async def _agent_error():
+            yield _format_sse("error", {
+                "detail": "Streaming is not supported with the SQL agent. Use /query instead.",
+            })
+        return StreamingResponse(
+            _agent_error(), media_type="text/event-stream",
+        )
+
+    # Load QA chain / retriever
+    try:
+        _get_qa()  # ensure retriever is loaded
+    except FileNotFoundError:
+        async def _missing():
+            yield _format_sse("error", {
+                "detail": "Vectorstore not found. Run ingestion first.",
+            })
+        return StreamingResponse(_missing(), media_type="text/event-stream")
+    except ConnectionError as e:
+        detail = f"Ollama unavailable: {e}"
+
+        async def _conn_err():
+            yield _format_sse("error", {"detail": detail})
+
+        return StreamingResponse(_conn_err(), media_type="text/event-stream")
+
+    chat_history = _get_session_history(req.session_id)
+
+    # Resolve follow-up questions
+    resolver = _get_query_resolver()
+    resolved_question = req.question
+    if resolver and chat_history:
+        resolved_question = resolver.resolve(req.question, chat_history)
+
+    # Per-request retriever copy
+    request_retriever = _retriever.model_copy() if _retriever is not None else None
+
+    processed_question = _apply_query_preprocessing(resolved_question, request_retriever)
+
+    # Relevance checking with retry
+    relevance_score = None
+    retry_count = None
+    docs = []
+    if RELEVANCE_CHECK_ENABLED and request_retriever is not None:
+        from relevance_checker import RelevanceChecker, retrieve_with_relevance_check
+        checker = RelevanceChecker(
+            threshold=RELEVANCE_THRESHOLD,
+            use_cross_encoder_score=USE_CROSS_ENCODER_RELEVANCE,
+        )
+        docs, rel_info = retrieve_with_relevance_check(
+            request_retriever, processed_question, checker,
+            max_retries=MAX_RETRIEVAL_RETRIES,
+        )
+        relevance_score = rel_info["score"]
+        retry_count = rel_info["retry_count"]
+        if rel_info["retry_count"] > 0:
+            processed_question = _apply_query_preprocessing(
+                rel_info["final_query"], request_retriever,
+            )
+    elif request_retriever is not None:
+        docs = request_retriever.invoke(processed_question)
+
+    # Stream the LLM directly — ConversationalRetrievalChain doesn't yield
+    # incremental tokens, so we bypass the chain and call ChatOllama directly.
+    from retriever import QA_PROMPT
+
+    context = "\n\n".join(doc.page_content for doc in docs)
+    prompt = QA_PROMPT.format(context=context, question=processed_question)
+    llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL,
+                     temperature=0, streaming=True)
+
+    sources = _extract_sources_from_docs(docs)
+
+    async def _event_stream():
+        # Emit metadata (sources known before generation)
+        metadata = {
+            "sources": [s.model_dump() for s in sources],
+            "session_id": req.session_id,
+        }
+        if relevance_score is not None:
+            metadata["relevance_score"] = relevance_score
+        if retry_count is not None:
+            metadata["retry_count"] = retry_count
+        yield _format_sse("metadata", metadata)
+
+        # Stream answer tokens
+        full_answer = []
+        try:
+            async for chunk in llm.astream(prompt):
+                token = chunk.content
+                if token:
+                    full_answer.append(token)
+                    yield _format_sse("token", {"token": token})
+        except Exception:
+            logger.exception("Error during streaming generation")
+            yield _format_sse("error", {"detail": "Generation failed. Check server logs."})
+            return
+
+        yield _format_sse("done", {})
+
+        # Update session history with the complete answer
+        _append_session_history(req.session_id, req.question, "".join(full_answer))
+
+    return StreamingResponse(_event_stream(), media_type="text/event-stream")
 
 
 @app.post("/ingest", response_model=IngestResponse)

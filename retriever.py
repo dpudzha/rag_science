@@ -246,8 +246,9 @@ def build_retriever(vectorstore: FAISS) -> HybridRetriever:
     )
 
 
-def build_qa_chain(retriever: HybridRetriever) -> ConversationalRetrievalChain:
-    llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0)
+def build_qa_chain(retriever: HybridRetriever, streaming: bool = False) -> ConversationalRetrievalChain:
+    llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0,
+                     streaming=streaming)
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=retriever,

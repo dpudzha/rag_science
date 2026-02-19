@@ -15,6 +15,7 @@ from config import (
     INTENT_CLASSIFICATION_ENABLED, ENABLE_SQL_AGENT,
     RELEVANCE_CHECK_ENABLED, RELEVANCE_THRESHOLD, MAX_RETRIEVAL_RETRIES,
     QUERY_RESOLUTION_ENABLED, USE_CROSS_ENCODER_RELEVANCE,
+    get_tunable_config, apply_config, save_config, load_config,
 )
 from health import check_ollama
 from langchain_ollama import ChatOllama
@@ -189,7 +190,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "DELETE"],
+    allow_methods=["GET", "POST", "DELETE", "PUT"],
     allow_headers=["Content-Type", "Authorization"],
 )
 
@@ -231,6 +232,10 @@ class QueryResponse(BaseModel):
     tool_used: str | None = None
     relevance_score: float | None = None
     retry_count: int | None = None
+
+
+class ConfigResponse(BaseModel):
+    config: dict
 
 
 class IngestResponse(BaseModel):
@@ -518,3 +523,41 @@ def health() -> HealthResponse:
         status="ok" if ollama_status == "ok" else "degraded",
         ollama=ollama_status,
     )
+
+
+@app.get("/config", response_model=ConfigResponse)
+def get_config() -> ConfigResponse:
+    return ConfigResponse(config=get_tunable_config())
+
+
+@app.put("/config", response_model=ConfigResponse)
+def update_config(updates: dict) -> ConfigResponse:
+    try:
+        apply_config(updates)
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return ConfigResponse(config=get_tunable_config())
+
+
+@app.post("/config/save")
+def save_config_endpoint() -> dict:
+    try:
+        save_config()
+    except OSError as e:
+        logger.exception("Failed to save config")
+        raise HTTPException(status_code=500, detail="Failed to save config. Check server logs.")
+    return {"status": "ok"}
+
+
+@app.post("/config/load", response_model=ConfigResponse)
+def load_config_endpoint() -> ConfigResponse:
+    try:
+        data = load_config()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="No saved config file found")
+    except (ValueError, TypeError) as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except OSError as e:
+        logger.exception("Failed to load config")
+        raise HTTPException(status_code=500, detail="Failed to load config. Check server logs.")
+    return ConfigResponse(config=get_tunable_config())

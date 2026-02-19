@@ -15,7 +15,8 @@ Question-answering over scientific papers using local LLMs. Combines FAISS vecto
 - Agent mode with tool selection between document RAG and safe text-to-SQL
 - Local-only inference via Ollama
 - Evaluation framework for MRR/Recall@K and experiment comparison
-- Test suite status: **194 passed**
+- React frontend with SSE streaming chat, config panel, and ingestion UI
+- Test suite status: **223 passed**
 
 ### Architecture
 
@@ -42,8 +43,10 @@ flowchart TD
     TR --> R
     DB --> TS
 
-    S --> API[FastAPI Endpoints<br/>/query /ingest /health]
+    S --> API[FastAPI Endpoints<br/>/query /ingest /config /health]
     B --> API
+
+    API --> FE[React Frontend<br/>Chat + Ingest + Config]
 
     EVAL[Evaluation Suite<br/>MRR, Recall@K, experiments] --> Q
 ```
@@ -102,6 +105,18 @@ The pixel bump pitch is 50 µm × 50 µm for the ATLAS variant.
 Sources: rd53cATLAS1v92.pdf p.7, introduction_guide.pdf p.20
 ```
 
+## Frontend
+
+A React + TypeScript chat UI with SSE streaming, document ingestion controls, and a runtime config panel.
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Opens at `http://localhost:5173` and proxies API calls to the backend on port 8000.
+
 ## API Server
 
 ```bash
@@ -113,7 +128,12 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | Method | Path | Description |
 |--------|------|-------------|
 | `POST` | `/query` | Ask a question |
-| `POST` | `/ingest` | Trigger PDF ingestion |
+| `POST` | `/query/stream` | Ask a question (SSE streaming) |
+| `POST` | `/ingest` | Trigger document ingestion |
+| `GET` | `/config` | Get current runtime config |
+| `PUT` | `/config` | Update runtime config |
+| `POST` | `/config/save` | Save config to file |
+| `POST` | `/config/load` | Load config from file |
 | `DELETE` | `/sessions/{id}` | Clear a conversation session |
 | `GET` | `/health` | Check Ollama connectivity |
 
@@ -141,7 +161,7 @@ curl -X POST http://localhost:8000/query \
 docker-compose up --build
 ```
 
-Runs the API on port 8000 and Ollama on port 11434 with GPU passthrough.
+Runs the frontend on port 3000, the API on port 8000, and Ollama on port 11434 with GPU passthrough.
 
 ## Scheduled Ingestion
 
@@ -224,7 +244,8 @@ To auto-generate `expected_chunk_ids` from existing `expected_sources`/`expected
 ├── api.py               # FastAPI REST server
 ├── health.py            # Ollama health check with retries
 ├── logging_config.py    # Centralized logging
-├── papers/              # Input PDFs
+├── frontend/            # React + Vite + TypeScript UI
+├── papers/              # Input documents (PDF, DOCX, XLSX)
 ├── vectorstore/         # Generated indexes (FAISS + BM25)
 ├── tests/               # pytest suite
 ├── eval/                # Retrieval evaluation framework

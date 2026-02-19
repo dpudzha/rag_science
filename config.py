@@ -77,3 +77,55 @@ S3_LOOKBACK_HOURS = int(os.getenv("S3_LOOKBACK_HOURS", "3"))
 ENABLE_PARENT_RETRIEVAL = os.getenv("ENABLE_PARENT_RETRIEVAL", "false").lower() == "true"
 CHILD_CHUNK_SIZE = int(os.getenv("CHILD_CHUNK_SIZE", "400"))
 CHILD_CHUNK_OVERLAP = int(os.getenv("CHILD_CHUNK_OVERLAP", "50"))
+
+# --- Config persistence ---
+CONFIG_FILE = os.path.join(_PROJECT_ROOT, "config.json")
+
+_TUNABLE_KEYS = [
+    "LLM_MODEL", "EMBEDDING_MODEL", "RERANK_MODEL",
+    "TOP_K", "TOP_K_CANDIDATES", "BM25_WEIGHT", "DENSE_WEIGHT", "RELEVANCE_THRESHOLD",
+    "CHUNK_SIZE", "CHUNK_OVERLAP",
+    "INTENT_CLASSIFICATION_ENABLED", "ARCHETYPE_DETECTION_ENABLED",
+    "QUERY_REFORMULATION_ENABLED", "QUERY_RESOLUTION_ENABLED",
+    "METADATA_EXTRACTION_ENABLED", "RELEVANCE_CHECK_ENABLED",
+    "USE_CROSS_ENCODER_RELEVANCE", "ENABLE_SQL_AGENT",
+    "ENABLE_TABLE_EXTRACTION", "ENABLE_PARENT_RETRIEVAL",
+]
+
+import json as _json
+
+
+def get_tunable_config() -> dict:
+    this = __import__(__name__)
+    return {key: getattr(this, key) for key in _TUNABLE_KEYS}
+
+
+def apply_config(updates: dict) -> None:
+    this = __import__(__name__)
+    tunable = get_tunable_config()
+    for key, value in updates.items():
+        if key not in tunable:
+            raise ValueError(f"Unknown config key: {key}")
+        expected_type = type(tunable[key])
+        if not isinstance(value, expected_type):
+            # Allow int where float is expected
+            if expected_type is float and isinstance(value, int):
+                value = float(value)
+            else:
+                raise TypeError(
+                    f"Invalid type for {key}: expected {expected_type.__name__}, "
+                    f"got {type(value).__name__}"
+                )
+        setattr(this, key, value)
+
+
+def save_config(path: str = CONFIG_FILE) -> None:
+    with open(path, "w") as f:
+        _json.dump(get_tunable_config(), f, indent=2)
+
+
+def load_config(path: str = CONFIG_FILE) -> dict:
+    with open(path) as f:
+        data = _json.load(f)
+    apply_config(data)
+    return data

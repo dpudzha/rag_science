@@ -20,7 +20,14 @@
     "AUC": "area under the curve",
     "F1": "F1 score",
     "BLEU": "bilingual evaluation understudy",
-    "ROUGE": "recall-oriented understudy for gisting evaluation"
+    "ROUGE": "recall-oriented understudy for gisting evaluation",
+    "ITk": "Inner Tracker ATLAS Inner Tracker",
+    "ATLAS": "ATLAS experiment Large Hadron Collider detector",
+    "HL-LHC": "High-Luminosity Large Hadron Collider",
+    "DAQ": "data acquisition",
+    "TTC": "timing trigger and control",
+    "ASIC": "application-specific integrated circuit",
+    "RD53": "RD53 readout chip pixel detector"
   },
   "synonyms": {
     "accuracy": ["precision", "performance", "score"],

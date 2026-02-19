@@ -1,0 +1,185 @@
+.config-panel {
+  padding: 32px;
+  max-width: 700px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.config-title {
+  font-size: 1.4rem;
+  margin-bottom: 24px;
+  color: #e0e0e0;
+}
+
+.config-loading {
+  color: #6a6a80;
+}
+
+.config-section {
+  margin-bottom: 28px;
+}
+
+.config-section-title {
+  font-size: 1rem;
+  color: #a0a0b8;
+  margin-bottom: 12px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #0f3460;
+}
+
+.config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.config-field {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.config-label {
+  min-width: 200px;
+  font-size: 0.9rem;
+  color: #c0c0d0;
+}
+
+.config-input {
+  flex: 1;
+  max-width: 280px;
+  padding: 8px 12px;
+  background: #1a1a2e;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.config-input:focus {
+  border-color: #533483;
+}
+
+.slider-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+  max-width: 280px;
+}
+
+.slider-row input[type="range"] {
+  flex: 1;
+  accent-color: #533483;
+}
+
+.slider-value {
+  min-width: 30px;
+  text-align: right;
+  font-size: 0.85rem;
+  color: #a0a0b8;
+}
+
+.config-flags {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.config-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.config-toggle input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  background: #2a2a40;
+  border-radius: 11px;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+
+.toggle-switch::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: #6a6a80;
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.config-toggle input:checked + .toggle-switch {
+  background: #0f3460;
+}
+
+.config-toggle input:checked + .toggle-switch::after {
+  transform: translateX(18px);
+  background: #8080f0;
+}
+
+.toggle-label {
+  font-size: 0.9rem;
+  color: #c0c0d0;
+}
+
+.config-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.config-btn {
+  padding: 10px 20px;
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  color: #e0e0e0;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.config-btn:hover {
+  background: #0f3460;
+}
+
+.config-btn.primary {
+  background: #0f3460;
+  border-color: #533483;
+}
+
+.config-btn.primary:hover {
+  background: #533483;
+}
+
+.config-status {
+  margin-top: 16px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+}
+
+.config-status.success {
+  background: rgba(40, 167, 69, 0.15);
+  color: #5cb85c;
+  border: 1px solid rgba(40, 167, 69, 0.3);
+}
+
+.config-status.error {
+  background: rgba(220, 53, 69, 0.15);
+  color: #e06070;
+  border: 1px solid rgba(220, 53, 69, 0.3);
+}

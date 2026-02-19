@@ -82,6 +82,32 @@ def _asks_methodology(text: str) -> bool:
     return any(cue in lowered for cue in method_cues)
 
 
+def _load_abbreviations() -> dict[str, str]:
+    """Load abbreviation → expansion map from domain terminology."""
+    try:
+        data = json.loads(_DOMAIN_TERMINOLOGY_PATH.read_text())
+        return {k.lower(): v.lower() for k, v in data.get("abbreviations", {}).items()}
+    except Exception:
+        return {}
+
+
+_ABBREVIATIONS = _load_abbreviations()
+
+
+def _entity_present(entity: str, text_lower: str) -> bool:
+    """Check if an entity (or its known expansion) appears in text."""
+    ent_lower = entity.lower()
+    if ent_lower in text_lower:
+        return True
+    expansion = _ABBREVIATIONS.get(ent_lower)
+    if expansion:
+        # Accept if any word from the expansion appears in the rewrite
+        expansion_words = expansion.split()
+        if any(word in text_lower for word in expansion_words if len(word) > 2):
+            return True
+    return False
+
+
 def _is_safe_rewrite(original: str, rewritten: str, archetype: str) -> bool:
     """Reject rewrites that drift away from the original query intent."""
     if original.strip().lower() == rewritten.strip().lower():
@@ -94,9 +120,10 @@ def _is_safe_rewrite(original: str, rewritten: str, archetype: str) -> bool:
         if overlap < 0.5:
             return False
 
+    rewritten_lower = rewritten.lower()
     missing_entities = {
         ent.lower() for ent in _entity_tokens(original)
-        if ent.lower() not in rewritten.lower()
+        if not _entity_present(ent, rewritten_lower)
     }
     if missing_entities:
         return False

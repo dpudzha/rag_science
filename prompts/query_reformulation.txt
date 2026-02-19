@@ -9,7 +9,7 @@ Rules:
 - Preserve key entities exactly (model names, detector names, experiment names, abbreviations, versions, years)
 - Do NOT add archetype-specific jargon unless the original query already asks for it
 - If the query is already clear and specific, return it unchanged
-- Expand abbreviations if domain terms provide expansions
+- Only expand abbreviations that appear in the domain terms list — do NOT guess or invent expansions for unknown acronyms; keep them as-is
 - Output ONLY the reformulated query as a single sentence, nothing else
 
 Examples:

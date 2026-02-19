@@ -8,7 +8,7 @@ Step 1: Classify the query into one of these archetypes:
 - WHY_REASONING: Asks about causes or reasoning
 - SUMMARY: Requests an overview or summary
 
-Step 2: If the query contains abbreviations or informal terms, reformulate it using precise scientific terminology. Otherwise, keep the original query.
+Step 2: If the query contains abbreviations or informal terms, reformulate it using precise scientific terminology. Only expand abbreviations that appear in the domain terms list below — do NOT guess or invent expansions for unknown acronyms. Keep unknown acronyms as-is. Otherwise, keep the original query.
 
 Domain terms for reference:
 {domain_terms}

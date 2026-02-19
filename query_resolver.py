@@ -1,5 +1,6 @@
 """Resolve follow-up questions into standalone queries using conversation history."""
 import logging
+import re
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -10,6 +11,18 @@ logger = logging.getLogger(__name__)
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "query_resolution.txt"
 _PROMPT_TEMPLATE = _PROMPT_PATH.read_text()
+
+# Pronouns and demonstratives that signal a genuine follow-up reference
+_FOLLOW_UP_RE = re.compile(
+    r"\b(it|its|this|that|these|those|they|them|their|theirs"
+    r"|such|the\s+same|the\s+other|the\s+mentioned|the\s+above|the\s+previous)\b",
+    re.IGNORECASE,
+)
+
+
+def _needs_resolution(question: str) -> bool:
+    """Return True only if the question contains references that require history."""
+    return bool(_FOLLOW_UP_RE.search(question))
 
 
 class QueryResolver:
@@ -30,6 +43,11 @@ class QueryResolver:
             Falls back to the original question on error or empty history.
         """
         if not chat_history:
+            return question
+
+        # Skip LLM call for questions that are clearly standalone
+        if not _needs_resolution(question):
+            logger.debug("Query resolution skipped — no follow-up indicators: '%s'", question[:60])
             return question
 
         history_text = "\n".join(

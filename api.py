@@ -246,10 +246,19 @@ class HealthResponse(BaseModel):
 # --- Endpoints ---
 @app.post("/query", response_model=QueryResponse)
 def query(req: QueryRequest) -> QueryResponse:
+    chat_history = _get_session_history(req.session_id)
+
+    # Resolve follow-up questions before intent classification so that
+    # bare follow-ups like "Why?" are resolved into full questions first.
+    resolver = _get_query_resolver()
+    resolved_question = req.question
+    if resolver and chat_history:
+        resolved_question = resolver.resolve(req.question, chat_history)
+
     # Intent classification: skip RAG for greetings/chitchat
     classifier = _get_intent_classifier()
     if classifier:
-        intent = classifier.classify(req.question)
+        intent = classifier.classify(resolved_question)
         response = classifier.get_chitchat_response(intent)
         if response:
             return QueryResponse(answer=response, sources=[], session_id=req.session_id)
@@ -260,14 +269,6 @@ def query(req: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=503, detail="Vectorstore not found. Run ingestion first.")
     except ConnectionError as e:
         raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
-
-    chat_history = _get_session_history(req.session_id)
-
-    # Resolve follow-up questions into standalone queries
-    resolver = _get_query_resolver()
-    resolved_question = req.question
-    if resolver and chat_history:
-        resolved_question = resolver.resolve(req.question, chat_history)
 
     try:
         # Per-request retriever copy to avoid mutating shared state (weights, filters)
@@ -351,10 +352,29 @@ async def query_stream(req: QueryRequest):
     relevance check), emits a metadata event with sources, then streams
     answer tokens incrementally.
     """
+    # Agent path: not supported for streaming
+    if ENABLE_SQL_AGENT:
+        async def _agent_error():
+            yield _format_sse("error", {
+                "detail": "Streaming is not supported with the SQL agent. Use /query instead.",
+            })
+        return StreamingResponse(
+            _agent_error(), media_type="text/event-stream",
+        )
+
+    chat_history = _get_session_history(req.session_id)
+
+    # Resolve follow-up questions before intent classification so that
+    # bare follow-ups like "Why?" are resolved into full questions first.
+    resolver = _get_query_resolver()
+    resolved_question = req.question
+    if resolver and chat_history:
+        resolved_question = resolver.resolve(req.question, chat_history)
+
     # Intent classification: short-circuit for greetings/chitchat
     classifier = _get_intent_classifier()
     if classifier:
-        intent = classifier.classify(req.question)
+        intent = classifier.classify(resolved_question)
         response = classifier.get_chitchat_response(intent)
         if response:
             async def _chitchat_stream():
@@ -366,16 +386,6 @@ async def query_stream(req: QueryRequest):
             return StreamingResponse(
                 _chitchat_stream(), media_type="text/event-stream",
             )
-
-    # Agent path: not supported for streaming
-    if ENABLE_SQL_AGENT:
-        async def _agent_error():
-            yield _format_sse("error", {
-                "detail": "Streaming is not supported with the SQL agent. Use /query instead.",
-            })
-        return StreamingResponse(
-            _agent_error(), media_type="text/event-stream",
-        )
 
     # Load QA chain / retriever
     try:
@@ -393,14 +403,6 @@ async def query_stream(req: QueryRequest):
             yield _format_sse("error", {"detail": detail})
 
         return StreamingResponse(_conn_err(), media_type="text/event-stream")
-
-    chat_history = _get_session_history(req.session_id)
-
-    # Resolve follow-up questions
-    resolver = _get_query_resolver()
-    resolved_question = req.question
-    if resolver and chat_history:
-        resolved_question = resolver.resolve(req.question, chat_history)
 
     # Per-request retriever copy
     request_retriever = _retriever.model_copy() if _retriever is not None else None

@@ -21,16 +21,27 @@ def client():
 
 @pytest.fixture(autouse=True)
 def reset_api_state():
-    """Reset API state between tests."""
+    """Reset API state between tests.
+
+    Disables intent classification and query resolution by default so tests
+    don't depend on a running LLM.  Tests that specifically need these
+    features should provide their own mocks.
+    """
     import api
     api._qa_chain = None
     api._retriever = None
     api._agent = None
+    api._intent_classifier = None
+    api._query_resolver = None
     api._sessions.clear()
-    yield
+    with patch("api.INTENT_CLASSIFICATION_ENABLED", False), \
+         patch("api.QUERY_RESOLUTION_ENABLED", False):
+        yield
     api._qa_chain = None
     api._retriever = None
     api._agent = None
+    api._intent_classifier = None
+    api._query_resolver = None
     api._sessions.clear()
 
 

@@ -140,18 +140,19 @@ def _run_pipeline(
     When streaming=True, prints answer tokens as they arrive and returns a
     synthetic result dict with the accumulated answer and source_documents.
     """
+    # Resolve follow-up questions into standalone queries (before intent
+    # classification so that bare follow-ups like "Why?" are resolved first)
+    resolved = question
+    if query_resolver and chat_history:
+        resolved = query_resolver.resolve(question, chat_history)
+
     # Intent classification: skip RAG for greetings/chitchat
     if classifier:
-        intent = classifier.classify(question)
+        intent = classifier.classify(resolved)
         response = classifier.get_chitchat_response(intent)
         if response:
             print(f"\n{response}\n")
             return None
-
-    # Resolve follow-up questions into standalone queries
-    resolved = question
-    if query_resolver and chat_history:
-        resolved = query_resolver.resolve(question, chat_history)
 
     # Archetype detection + reformulation + metadata extraction
     processed = preprocess_query(

@@ -13,10 +13,11 @@ CHUNK_SEPARATORS = ["\n\n", "\n", ". ", " ", ""]
 # Ollama settings
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
 EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "nomic-embed-text")
-LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1:8b")
+# LLM_MODEL = os.getenv("LLM_MODEL", "llama3.1:8b") # llama3.1:8b
+LLM_MODEL = os.getenv("LLM_MODEL", "gemma3:12b") # quite good quality/speed ratio 
 
 # Retrieval settings
-TOP_K_CANDIDATES = int(os.getenv("TOP_K_CANDIDATES", "50"))
+TOP_K_CANDIDATES = int(os.getenv("TOP_K_CANDIDATES", "20"))
 TOP_K = int(os.getenv("TOP_K", "4"))
 BM25_WEIGHT = float(os.getenv("BM25_WEIGHT", "0.3"))
 DENSE_WEIGHT = float(os.getenv("DENSE_WEIGHT", "0.7"))

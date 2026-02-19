@@ -182,8 +182,7 @@ def _run_pipeline(
     elif streaming:
         # Stream the LLM directly — ConversationalRetrievalChain.stream()
         # does not yield incremental tokens, so we bypass the chain.
-        from langchain_ollama import ChatOllama
-        from config import OLLAMA_BASE_URL, LLM_MODEL
+        from utils import get_default_llm
         from retriever import QA_PROMPT
 
         if docs is None:
@@ -192,8 +191,7 @@ def _run_pipeline(
         context = "\n\n".join(doc.page_content for doc in docs)
         prompt = QA_PROMPT.format(context=context, question=processed)
 
-        llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL,
-                         temperature=0, streaming=True)
+        llm = get_default_llm(temperature=0, streaming=True)
         full_answer = []
         print("\nAnswer:")
         for chunk in llm.stream(prompt):
@@ -214,8 +212,8 @@ def _run_pipeline(
 
 
 def interactive() -> None:
-    from health import check_ollama
-    check_ollama()
+    from health import check_backend
+    check_backend()
 
     vectorstore = load_vectorstore()
     retriever = build_retriever(vectorstore)
@@ -257,8 +255,8 @@ def interactive() -> None:
 
 
 def ask(question: str) -> None:
-    from health import check_ollama
-    check_ollama()
+    from health import check_backend
+    check_backend()
 
     vectorstore = load_vectorstore()
     retriever = build_retriever(vectorstore)

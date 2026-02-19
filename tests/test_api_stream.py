@@ -13,7 +13,7 @@ from langchain_core.documents import Document
 @pytest.fixture
 def client():
     """Create a test client with mocked Ollama health check."""
-    with patch("api.check_ollama"):
+    with patch("api.check_backend"):
         from api import app
         with TestClient(app) as c:
             yield c
@@ -61,12 +61,12 @@ def _parse_sse(text: str) -> list[dict]:
 
 @dataclass
 class FakeChunk:
-    """Mimics a ChatOllama streaming chunk with a .content attribute."""
+    """Mimics a streaming LLM chunk with a .content attribute."""
     content: str
 
 
 def _make_mock_llm(tokens: list[str], fail_after: int | None = None):
-    """Create a mock ChatOllama that yields tokens via astream.
+    """Create a mock LLM that yields tokens via astream.
 
     If fail_after is set, raises RuntimeError after that many tokens.
     """
@@ -101,7 +101,7 @@ class TestStreamEventOrdering:
             patch("api._get_qa", return_value=MagicMock()),
             patch("api._retriever", mock_retriever),
             patch("api.RELEVANCE_CHECK_ENABLED", False),
-            patch("api.ChatOllama", return_value=mock_llm),
+            patch("api.get_default_llm", return_value=mock_llm),
         ):
             resp = client.post(
                 "/query/stream",
@@ -149,7 +149,7 @@ class TestStreamEventOrdering:
             patch("api._get_qa", return_value=MagicMock()),
             patch("api._retriever", mock_retriever),
             patch("api.RELEVANCE_CHECK_ENABLED", True),
-            patch("api.ChatOllama", return_value=mock_llm),
+            patch("api.get_default_llm", return_value=mock_llm),
         ):
             resp = client.post(
                 "/query/stream",
@@ -207,7 +207,7 @@ class TestStreamErrors:
 
         events = _parse_sse(resp.text)
         assert events[0]["event"] == "error"
-        assert "Ollama unavailable" in events[0]["data"]["detail"]
+        assert "LLM backend unavailable" in events[0]["data"]["detail"]
 
     def test_agent_path_returns_error_event(self, client):
         with patch("api.ENABLE_SQL_AGENT", True):
@@ -232,7 +232,7 @@ class TestStreamErrors:
             patch("api._get_qa", return_value=MagicMock()),
             patch("api._retriever", mock_retriever),
             patch("api.RELEVANCE_CHECK_ENABLED", False),
-            patch("api.ChatOllama", return_value=mock_llm),
+            patch("api.get_default_llm", return_value=mock_llm),
         ):
             resp = client.post(
                 "/query/stream",
@@ -263,7 +263,7 @@ class TestStreamSessionHistory:
             patch("api._get_qa", return_value=MagicMock()),
             patch("api._retriever", mock_retriever),
             patch("api.RELEVANCE_CHECK_ENABLED", False),
-            patch("api.ChatOllama", return_value=mock_llm),
+            patch("api.get_default_llm", return_value=mock_llm),
         ):
             resp = client.post(
                 "/query/stream",

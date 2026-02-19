@@ -11,14 +11,14 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 
 from config import (
-    OLLAMA_BASE_URL, LLM_MODEL, SESSION_TTL_SECONDS, CORS_ORIGINS,
+    LLM_BACKEND, SESSION_TTL_SECONDS, CORS_ORIGINS,
     INTENT_CLASSIFICATION_ENABLED, ENABLE_SQL_AGENT,
     RELEVANCE_CHECK_ENABLED, RELEVANCE_THRESHOLD, MAX_RETRIEVAL_RETRIES,
     QUERY_RESOLUTION_ENABLED, USE_CROSS_ENCODER_RELEVANCE,
     get_tunable_config, apply_config, save_config, load_config,
 )
-from health import check_ollama
-from langchain_ollama import ChatOllama
+from health import check_backend
+from utils import get_default_llm
 from logging_config import setup_logging
 
 setup_logging()
@@ -178,9 +178,9 @@ def _apply_query_preprocessing(question: str, retriever=None) -> str:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     try:
-        check_ollama()
+        check_backend()
     except ConnectionError:
-        logger.warning("Ollama not available at startup — queries will fail until it's reachable")
+        logger.warning("LLM backend not available at startup — queries will fail until it's reachable")
     yield
 
 
@@ -245,7 +245,7 @@ class IngestResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    ollama: str
+    ollama: str  # kept for backward compat; reports backend status
 
 
 # --- Endpoints ---
@@ -273,7 +273,7 @@ def query(req: QueryRequest) -> QueryResponse:
     except FileNotFoundError:
         raise HTTPException(status_code=503, detail="Vectorstore not found. Run ingestion first.")
     except ConnectionError as e:
-        raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
+        raise HTTPException(status_code=503, detail=f"LLM backend unavailable: {e}")
 
     try:
         # Per-request retriever copy to avoid mutating shared state (weights, filters)
@@ -315,7 +315,7 @@ def query(req: QueryRequest) -> QueryResponse:
 
         result = qa.invoke({"question": processed_question, "chat_history": chat_history})
     except ConnectionError as e:
-        raise HTTPException(status_code=503, detail=f"Ollama unavailable: {e}")
+        raise HTTPException(status_code=503, detail=f"LLM backend unavailable: {e}")
     except Exception as e:
         logger.exception("Unexpected error during query")
         raise HTTPException(status_code=500, detail="An internal error occurred. Check server logs.")
@@ -402,7 +402,7 @@ async def query_stream(req: QueryRequest):
             })
         return StreamingResponse(_missing(), media_type="text/event-stream")
     except ConnectionError as e:
-        detail = f"Ollama unavailable: {e}"
+        detail = f"LLM backend unavailable: {e}"
 
         async def _conn_err():
             yield _format_sse("error", {"detail": detail})
@@ -438,13 +438,12 @@ async def query_stream(req: QueryRequest):
         docs = request_retriever.invoke(processed_question)
 
     # Stream the LLM directly — ConversationalRetrievalChain doesn't yield
-    # incremental tokens, so we bypass the chain and call ChatOllama directly.
+    # incremental tokens, so we bypass the chain and call the LLM directly.
     from retriever import QA_PROMPT
 
     context = "\n\n".join(doc.page_content for doc in docs)
     prompt = QA_PROMPT.format(context=context, question=processed_question)
-    llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL,
-                     temperature=0, streaming=True)
+    llm = get_default_llm(temperature=0, streaming=True)
 
     sources = _extract_sources_from_docs(docs)
 
@@ -515,7 +514,7 @@ def delete_session(session_id: str) -> dict:
 @app.get("/health", response_model=HealthResponse)
 def health() -> HealthResponse:
     try:
-        check_ollama(retries=1, delay=0)
+        check_backend(retries=1, delay=0)
         ollama_status = "ok"
     except ConnectionError:
         ollama_status = "unreachable"

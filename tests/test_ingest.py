@@ -263,7 +263,7 @@ class TestIngestFlow:
             "title": "Empty",
         }]
 
-        with patch("health.check_ollama"), \
+        with patch("health.check_backend"), \
              patch("ingest.load_new_documents", return_value=(docs, [])), \
              patch("ingest.load_ingest_record", return_value={}), \
              patch("ingest._save_large_tables_to_sql", return_value=[]), \
@@ -287,7 +287,7 @@ class TestIngestFlow:
         }]
         fake_store = object()
 
-        with patch("health.check_ollama"), \
+        with patch("health.check_backend"), \
              patch("ingest.load_new_documents", return_value=(docs, [])), \
              patch("ingest.load_ingest_record", return_value={"oldhash": "old.pdf"}), \
              patch("ingest._save_large_tables_to_sql", return_value=[]), \
@@ -310,7 +310,7 @@ class TestIngestFlow:
     def test_ingest_syncs_s3_before_loading_documents(self):
         import ingest
 
-        with patch("health.check_ollama"), \
+        with patch("health.check_backend"), \
              patch("ingest.sync_recent_s3_documents") as mock_sync, \
              patch("ingest.load_new_documents", return_value=([], [])):
             ingest.ingest()

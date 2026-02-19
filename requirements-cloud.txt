@@ -1,0 +1,5 @@
+# Optional cloud LLM backend dependencies.
+# Install these when using LLM_BACKEND=anthropic or LLM_BACKEND=openai.
+#   pip install -r requirements-cloud.txt
+langchain-anthropic>=0.3
+langchain-openai>=0.3

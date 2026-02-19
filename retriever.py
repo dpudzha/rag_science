@@ -6,7 +6,7 @@ from pathlib import Path
 from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
 from langchain_community.vectorstores import FAISS
-from langchain_ollama import OllamaEmbeddings, ChatOllama
+from utils import get_default_llm, get_default_embeddings
 from langchain_classic.chains import ConversationalRetrievalChain
 from langchain_core.documents import Document
 from langchain_core.prompts import PromptTemplate
@@ -15,9 +15,6 @@ from pydantic import ConfigDict
 
 from config import (
     VECTORSTORE_DIR,
-    OLLAMA_BASE_URL,
-    EMBEDDING_MODEL,
-    LLM_MODEL,
     TOP_K,
     TOP_K_CANDIDATES,
     BM25_WEIGHT,
@@ -191,7 +188,7 @@ def load_vectorstore() -> FAISS:
         )
         logger.error(message)
         raise VectorstoreNotFoundError(message)
-    embeddings = OllamaEmbeddings(model=EMBEDDING_MODEL, base_url=OLLAMA_BASE_URL)
+    embeddings = get_default_embeddings()
     return FAISS.load_local(VECTORSTORE_DIR, embeddings, allow_dangerous_deserialization=True)
 
 
@@ -247,8 +244,7 @@ def build_retriever(vectorstore: FAISS) -> HybridRetriever:
 
 
 def build_qa_chain(retriever: HybridRetriever, streaming: bool = False) -> ConversationalRetrievalChain:
-    llm = ChatOllama(model=LLM_MODEL, base_url=OLLAMA_BASE_URL, temperature=0,
-                     streaming=streaming)
+    llm = get_default_llm(temperature=0, streaming=streaming)
     return ConversationalRetrievalChain.from_llm(
         llm=llm,
         retriever=retriever,

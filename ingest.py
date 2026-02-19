@@ -14,7 +14,7 @@ from pathlib import Path
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import FAISS
-from langchain_ollama import OllamaEmbeddings
+from utils import get_default_embeddings
 from rank_bm25 import BM25Okapi
 from config import (
     PAPERS_DIR,
@@ -23,8 +23,6 @@ from config import (
     CHUNK_SIZE,
     CHUNK_OVERLAP,
     CHUNK_SEPARATORS,
-    OLLAMA_BASE_URL,
-    EMBEDDING_MODEL,
     ENABLE_PARENT_RETRIEVAL,
     CHILD_CHUNK_SIZE,
     CHILD_CHUNK_OVERLAP,
@@ -371,11 +369,8 @@ def chunk_documents_child(docs: list[dict]) -> tuple[list[Document], list[Docume
     return parent_chunks, child_chunks
 
 
-def get_embeddings() -> OllamaEmbeddings:
-    return OllamaEmbeddings(
-        model=EMBEDDING_MODEL,
-        base_url=OLLAMA_BASE_URL,
-    )
+def get_embeddings():
+    return get_default_embeddings()
 
 
 def build_bm25(docs: list[Document]) -> tuple[BM25Okapi, list[Document]]:
@@ -568,8 +563,8 @@ def _save_large_tables_to_sql(large_tables: list[dict]) -> list[Document]:
 
 
 def ingest() -> None:
-    from health import check_ollama
-    check_ollama()
+    from health import check_backend
+    check_backend()
 
     sync_recent_s3_documents(PAPERS_DIR)
 

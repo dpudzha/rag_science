@@ -1,10 +1,10 @@
-"""Ollama connectivity health check with retries."""
+"""Backend connectivity health check with retries."""
 import logging
 import time
 
 import httpx
 
-from config import OLLAMA_BASE_URL
+from config import OLLAMA_BASE_URL, LLM_BACKEND, ANTHROPIC_API_KEY, OPENAI_API_KEY
 
 logger = logging.getLogger(__name__)
 
@@ -34,3 +34,28 @@ def check_ollama(retries: int = 5, delay: float = 2) -> bool:
         f"Could not reach Ollama at {OLLAMA_BASE_URL} after {retries} attempts. "
         "Is Ollama running?"
     )
+
+
+def check_backend(retries: int = 5, delay: float = 2) -> bool:
+    """Verify the configured LLM backend is available.
+
+    For ollama: hits /api/tags with retries.
+    For anthropic/openai: verifies the API key is set.
+    """
+    if LLM_BACKEND == "anthropic":
+        if not ANTHROPIC_API_KEY:
+            raise ConnectionError(
+                "LLM_BACKEND=anthropic but ANTHROPIC_API_KEY is not set."
+            )
+        logger.info("Anthropic backend configured (API key set)")
+        return True
+
+    if LLM_BACKEND == "openai":
+        if not OPENAI_API_KEY:
+            raise ConnectionError(
+                "LLM_BACKEND=openai but OPENAI_API_KEY is not set."
+            )
+        logger.info("OpenAI backend configured (API key set)")
+        return True
+
+    return check_ollama(retries=retries, delay=delay)

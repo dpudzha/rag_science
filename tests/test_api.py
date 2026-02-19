@@ -11,7 +11,7 @@ from fastapi.testclient import TestClient
 @pytest.fixture
 def client():
     """Create a test client with mocked Ollama health check."""
-    with patch("api.check_ollama"):
+    with patch("api.check_backend"):
         from api import app
         with TestClient(app) as c:
             yield c
@@ -45,7 +45,7 @@ def reset_api_state():
 
 class TestHealthEndpoint:
     def test_health_ok(self, client):
-        with patch("api.check_ollama"):
+        with patch("api.check_backend"):
             resp = client.get("/health")
         assert resp.status_code == 200
         data = resp.json()
@@ -53,7 +53,7 @@ class TestHealthEndpoint:
         assert data["ollama"] == "ok"
 
     def test_health_degraded(self, client):
-        with patch("api.check_ollama", side_effect=ConnectionError("down")):
+        with patch("api.check_backend", side_effect=ConnectionError("down")):
             resp = client.get("/health")
         assert resp.status_code == 200
         data = resp.json()

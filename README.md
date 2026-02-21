@@ -26,29 +26,36 @@ flowchart TD
     B --> C[Embeddings via Ollama]
     B --> D[BM25 Index]
     C --> E[FAISS Vector Index]
+    B -.->|large tables| DB[(SQLite Tables)]
 
-    U[User Query<br/>CLI or API] --> Q[Query Orchestrator]
-    E --> R[Hybrid Retrieval]
-    D --> R
+    U[User Query<br/>CLI or API] --> IC{Intent<br/>Classification}
+
+    IC -- greeting / chitchat --> CR[Canned Response]
+    IC -- substantive --> PP[Preprocessing<br/>archetype detection +<br/>query reformulation +<br/>metadata extraction]
+
+    PP --> R[Hybrid Retrieval<br/>FAISS + BM25]
     R --> X[Cross-Encoder Reranker]
-    X --> L[LLM Answer Generation]
+    X --> REL{Relevance<br/>Check}
+    REL -- irrelevant,<br/>reformulate + retry --> R
+    REL -- relevant --> AG{Agent Mode?}
+
+    AG -- No --> L[LLM Answer Generation]
+    AG -- Yes --> T[RAG Agent]
+    T --> TR[RAG Tool<br/>hybrid retrieval]
+    T --> TS[SQL Tool]
+    TR -.-> E
+    TR -.-> D
+    TS <--> DB
+    T --> L
+
     L --> S[Cited Response<br/>answer + sources]
 
-    Q --> G{Agent Mode?}
-    G -- No --> R
-    G -- Yes --> T[RAG Agent]
-    T --> TR[RAG Tool]
-    T --> TS[SQL Tool]
-    TS --> DB[(SQLite Tables)]
-    TR --> R
-    DB --> TS
-
     S --> API[FastAPI Endpoints<br/>/query /ingest /config /health]
-    B --> API
-
     API --> FE[React Frontend<br/>Chat + Ingest + Config]
 
-    EVAL[Evaluation Suite<br/>MRR, Recall@K, experiments] --> Q
+    EVAL[Evaluation Suite<br/>MRR, Recall@K, experiments] -.->|offline eval harness| IC
+
+    API -->|triggers| B
 ```
 
 ## How It Works

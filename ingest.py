@@ -34,6 +34,9 @@ from config import (
     S3_PREFIX,
     S3_REGION,
     S3_LOOKBACK_HOURS,
+    LLM_BACKEND,
+    EMBEDDING_MODEL,
+    OPENAI_EMBEDDING_MODEL,
 )
 
 logger = logging.getLogger(__name__)
@@ -52,10 +55,27 @@ def file_hash(path: str) -> str:
     return hashlib.sha256(Path(path).read_bytes()).hexdigest()
 
 
+def _embedding_model_id() -> str:
+    """Return a string identifying the current embedding backend + model."""
+    if LLM_BACKEND in ("openai", "anthropic"):
+        return f"openai/{OPENAI_EMBEDDING_MODEL}"
+    return f"ollama/{EMBEDDING_MODEL}"
+
+
 def load_ingest_record() -> dict:
     record_path = Path(INGEST_RECORD)
     if record_path.exists():
-        return json.loads(record_path.read_text())
+        record = json.loads(record_path.read_text())
+        stored_model = record.get("_embedding_model")
+        current_model = _embedding_model_id()
+        if stored_model and stored_model != current_model:
+            logger.info(
+                "Embedding model changed (%s → %s), re-ingesting all documents",
+                stored_model,
+                current_model,
+            )
+            return {}
+        return record
     return {}
 
 
@@ -574,13 +594,17 @@ def ingest() -> None:
         logger.info("Nothing new to ingest.")
         return
     updated_record = load_ingest_record()
+    # Detect if this is a full re-ingest due to embedding model change
+    embedding_changed = "_embedding_model" not in updated_record
     for doc in docs:
         updated_record[doc["hash"]] = doc["source"]
+    updated_record["_embedding_model"] = _embedding_model_id()
 
     # Save large tables to SQLite and get description chunks for vectorstore
     table_description_chunks = _save_large_tables_to_sql(large_tables)
 
-    existing = load_existing_vectorstore()
+    # Don't merge with existing vectorstore if embedding model changed
+    existing = None if embedding_changed else load_existing_vectorstore()
 
     if ENABLE_PARENT_RETRIEVAL:
         parent_chunks, child_chunks = chunk_documents_child(docs)

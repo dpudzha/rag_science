@@ -274,7 +274,9 @@ class TestIngestFlow:
             ingest.ingest()
 
         mock_build_vectorstore.assert_not_called()
-        mock_save_ingest_record.assert_called_once_with({"newhash": "empty.pdf"})
+        saved = mock_save_ingest_record.call_args[0][0]
+        assert saved["newhash"] == "empty.pdf"
+        assert "_embedding_model" in saved
 
     def test_ingest_passes_updated_record_into_atomic_swap(self, sample_documents):
         import ingest
@@ -301,10 +303,10 @@ class TestIngestFlow:
             ingest.ingest()
 
         assert mock_save_atomic.call_count == 1
-        assert mock_save_atomic.call_args.kwargs["ingest_record"] == {
-            "oldhash": "old.pdf",
-            "newhash": "paper.pdf",
-        }
+        saved = mock_save_atomic.call_args.kwargs["ingest_record"]
+        assert saved["oldhash"] == "old.pdf"
+        assert saved["newhash"] == "paper.pdf"
+        assert "_embedding_model" in saved
         mock_save_ingest_record.assert_not_called()
 
     def test_ingest_syncs_s3_before_loading_documents(self):

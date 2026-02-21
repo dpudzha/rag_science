@@ -1,4 +1,8 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file (explicit path so notebooks find it)
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 

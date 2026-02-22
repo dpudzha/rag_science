@@ -1,10 +1,10 @@
 # RAG Science
 
-Question-answering over scientific papers using local LLMs. Combines FAISS vector search, BM25 keyword retrieval, and cross-encoder reranking for high-quality results. Runs entirely locally via [Ollama](https://ollama.com) — no cloud APIs or keys required.
+Question-answering over scientific papers with pluggable LLM backends. Combines FAISS vector search, BM25 keyword retrieval, and cross-encoder reranking for high-quality results. Supports local inference via [Ollama](https://ollama.com) (default) and cloud APIs (Anthropic, OpenAI) — switch backends with a single environment variable.
 
 ## Portfolio Snapshot
 
-`RAG Science` is a local-first Retrieval-Augmented Generation (RAG) platform for scientific documents. It ingests PDF/DOCX/XLSX files, performs hybrid retrieval (dense + keyword), reranks results with a cross-encoder, and returns grounded answers with citations.
+`RAG Science` is a Retrieval-Augmented Generation (RAG) platform for scientific documents with pluggable LLM backends (Ollama, Anthropic, OpenAI). It ingests PDF/DOCX/XLSX files, performs hybrid retrieval (dense + keyword), reranks results with a cross-encoder, and returns grounded answers with citations.
 
 ### Highlights
 
@@ -13,7 +13,7 @@ Question-answering over scientific papers using local LLMs. Combines FAISS vecto
 - Citation-aware responses (`source` + `page`)
 - FastAPI endpoints for querying, ingestion, sessions, and health checks
 - Agent mode with tool selection between document RAG and safe text-to-SQL
-- Local-only inference via Ollama
+- Pluggable LLM backends: Ollama (local), Anthropic, OpenAI
 - Evaluation framework for MRR/Recall@K and experiment comparison
 - React frontend with SSE streaming chat, config panel, and ingestion UI
 - Test suite status: **223 passed**
@@ -23,10 +23,16 @@ Question-answering over scientific papers using local LLMs. Combines FAISS vecto
 ```mermaid
 flowchart TD
     A[PDF / DOCX / XLSX Sources] --> B[Ingestion Pipeline<br/>parsers + chunking + metadata]
-    B --> C[Embeddings via Ollama]
+    B --> C[Embeddings]
     B --> D[BM25 Index]
     C --> E[FAISS Vector Index]
     B -.->|large tables| DB[(SQLite Tables)]
+
+    subgraph LLMBackend[LLM Backend]
+        OL[Ollama<br/>local]
+        AN[Anthropic<br/>Claude]
+        OA[OpenAI<br/>GPT]
+    end
 
     U[User Query<br/>CLI or API] --> IC{Intent<br/>Classification}
 
@@ -47,6 +53,12 @@ flowchart TD
     TR -.-> D
     TS <--> DB
     T --> L
+
+    LLMBackend -.-> IC
+    LLMBackend -.-> PP
+    LLMBackend -.-> REL
+    LLMBackend -.-> T
+    LLMBackend -.-> L
 
     L --> S[Cited Response<br/>answer + sources]
 
@@ -73,12 +85,8 @@ PDF/DOCX/XLSX → markdown + chunk + embed → FAISS + BM25 indexes → hybrid r
 ### Prerequisites
 
 - Python 3.11+
-- [Ollama](https://ollama.com) running locally
-
-```bash
-ollama pull nomic-embed-text
-ollama pull llama3.1:8b
-```
+- **Ollama backend (default):** [Ollama](https://ollama.com) running locally with `ollama pull nomic-embed-text && ollama pull llama3.1:8b`
+- **Cloud backends:** An API key for [Anthropic](https://console.anthropic.com) or [OpenAI](https://platform.openai.com)
 
 ### Setup
 
@@ -86,6 +94,24 @@ ollama pull llama3.1:8b
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+
+# For Anthropic or OpenAI backends:
+pip install -r requirements-cloud.txt
+```
+
+Select a backend via the `LLM_BACKEND` environment variable:
+
+```bash
+# Local (default)
+export LLM_BACKEND=ollama
+
+# Cloud
+export LLM_BACKEND=anthropic
+export ANTHROPIC_API_KEY=sk-...
+
+# or
+export LLM_BACKEND=openai
+export OPENAI_API_KEY=sk-...
 ```
 
 ### Usage
@@ -142,7 +168,7 @@ uvicorn api:app --host 0.0.0.0 --port 8000
 | `POST` | `/config/save` | Save config to file |
 | `POST` | `/config/load` | Load config from file |
 | `DELETE` | `/sessions/{id}` | Clear a conversation session |
-| `GET` | `/health` | Check Ollama connectivity |
+| `GET` | `/health` | Check LLM backend connectivity |
 
 ### Examples
 
@@ -168,7 +194,7 @@ curl -X POST http://localhost:8000/query \
 docker-compose up --build
 ```
 
-Runs the frontend on port 3000, the API on port 8000, and Ollama on port 11434 with GPU passthrough.
+Runs the frontend on port 3000, the API on port 8000, and Ollama on port 11434 with GPU passthrough. Set `LLM_BACKEND` and API keys in `.env` to use a cloud backend instead.
 
 ## Scheduled Ingestion
 
@@ -184,9 +210,13 @@ All settings are configurable via environment variables. Copy `.env.example` to 
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `LLM_BACKEND` | `ollama` | LLM backend: `ollama`, `anthropic`, or `openai` |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server URL |
-| `LLM_MODEL` | `llama3.1:8b` | LLM model for answering |
-| `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model |
+| `LLM_MODEL` | `llama3.1:8b` | LLM model for Ollama backend |
+| `ANTHROPIC_MODEL` | `claude-sonnet-4-20250514` | Model for Anthropic backend |
+| `OPENAI_MODEL` | `gpt-4o-mini` | Model for OpenAI backend |
+| `EMBEDDING_MODEL` | `nomic-embed-text` | Embedding model (Ollama) |
+| `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model (OpenAI/Anthropic) |
 | `CHUNK_SIZE` | `500` | Tokens per chunk |
 | `TOP_K` | `4` | Final results returned |
 | `TOP_K_CANDIDATES` | `50` | Candidates before reranking |
@@ -195,7 +225,7 @@ All settings are configurable via environment variables. Copy `.env.example` to 
 | `ENABLE_S3_INGEST` | `false` | Enable S3 sync before local ingestion |
 | `S3_LOOKBACK_HOURS` | `3` | S3 object age window for ingestion |
 | `SESSION_TTL_SECONDS` | `3600` | API session expiry |
-| `CORS_ORIGINS` | `*` | Allowed CORS origins |
+| `CORS_ORIGINS` | `localhost:3000,8000` | Allowed CORS origins |
 | `ENABLE_PARENT_RETRIEVAL` | `false` | Use small chunks for retrieval, large for context |
 
 ## Testing
@@ -249,7 +279,8 @@ To auto-generate `expected_chunk_ids` from existing `expected_sources`/`expected
 ├── ingest.py            # PDF → chunks → FAISS + BM25 indexes
 ├── query.py             # Hybrid retrieval → reranking → LLM answer
 ├── api.py               # FastAPI REST server
-├── health.py            # Ollama health check with retries
+├── utils.py             # LLM/embedding factory, shared utilities
+├── health.py            # Backend connectivity checks
 ├── logging_config.py    # Centralized logging
 ├── frontend/            # React + Vite + TypeScript UI
 ├── papers/              # Input documents (PDF, DOCX, XLSX)

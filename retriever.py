@@ -1,7 +1,9 @@
 """Retrieval components: hybrid search, cross-encoder reranking, vectorstore loading."""
 import logging
+import math
 import pickle
 from pathlib import Path
+from typing import Any
 
 from rank_bm25 import BM25Okapi
 from sentence_transformers import CrossEncoder
@@ -26,22 +28,119 @@ from utils import tokenize
 
 logger = logging.getLogger(__name__)
 
-# Module-level cross-encoder singleton (lazy-loaded)
-_cross_encoder: CrossEncoder | None = None
+
+def _prob_to_logit(p: float) -> float:
+    """Convert a 0-1 probability to a logit (inverse sigmoid)."""
+    p = max(1e-7, min(1 - 1e-7, p))
+    return math.log(p / (1 - p))
+
+
+class CohereReranker:
+    """Wraps the Cohere rerank API, exposing the same .predict() interface as CrossEncoder."""
+
+    def __init__(self, model: str, api_key: str):
+        import cohere
+        self.model = model
+        self.client = cohere.ClientV2(api_key=api_key)
+
+    def predict(self, pairs: list[list[str]], **kwargs) -> list[float]:
+        query = pairs[0][0]
+        documents = [p[1] for p in pairs]
+        response = self.client.rerank(
+            model=self.model,
+            query=query,
+            documents=documents,
+            top_n=len(documents),
+        )
+        # Build score array in original document order
+        scores = [0.0] * len(documents)
+        for result in response.results:
+            scores[result.index] = _prob_to_logit(result.relevance_score)
+        return scores
+
+
+class JinaReranker:
+    """Wraps the Jina rerank API, exposing the same .predict() interface as CrossEncoder."""
+
+    JINA_RERANK_URL = "https://api.jina.ai/v1/rerank"
+
+    def __init__(self, model: str, api_key: str):
+        self.model = model
+        self.api_key = api_key
+
+    def predict(self, pairs: list[list[str]], **kwargs) -> list[float]:
+        import httpx
+        query = pairs[0][0]
+        documents = [p[1] for p in pairs]
+        response = httpx.post(
+            self.JINA_RERANK_URL,
+            headers={"Authorization": f"Bearer {self.api_key}"},
+            json={
+                "model": self.model,
+                "query": query,
+                "documents": documents,
+                "top_n": len(documents),
+            },
+            timeout=30,
+        )
+        response.raise_for_status()
+        data = response.json()
+        scores = [0.0] * len(documents)
+        for result in data["results"]:
+            scores[result["index"]] = _prob_to_logit(result["relevance_score"])
+        return scores
+
+
+# Module-level reranker singleton (lazy-loaded)
+_reranker: Any = None
+_reranker_key: tuple[str, str] | None = None
 
 
 class VectorstoreNotFoundError(FileNotFoundError):
     """Raised when the FAISS vectorstore is missing from disk."""
 
 
-def _get_cross_encoder() -> CrossEncoder:
-    global _cross_encoder
-    if _cross_encoder is None:
-        logger.info("Loading cross-encoder model: %s", RERANK_MODEL)
-        # Suppress noisy model load logs from sentence-transformers
-        logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
-        _cross_encoder = CrossEncoder(RERANK_MODEL)
-    return _cross_encoder
+def _get_reranker() -> Any:
+    global _reranker, _reranker_key
+    import config as _cfg
+    backend = _cfg.RERANK_BACKEND
+    if backend == "cohere":
+        current_key = (backend, _cfg.COHERE_RERANK_MODEL)
+    elif backend == "jina":
+        current_key = (backend, _cfg.JINA_RERANK_MODEL)
+    else:
+        current_key = (backend, _cfg.RERANK_MODEL)
+
+    if _reranker is None or _reranker_key != current_key:
+        if backend == "cohere":
+            logger.info("Loading Cohere reranker: %s", _cfg.COHERE_RERANK_MODEL)
+            _reranker = CohereReranker(
+                model=_cfg.COHERE_RERANK_MODEL,
+                api_key=_cfg.COHERE_API_KEY,
+            )
+        elif backend == "jina":
+            logger.info("Loading Jina reranker: %s", _cfg.JINA_RERANK_MODEL)
+            _reranker = JinaReranker(
+                model=_cfg.JINA_RERANK_MODEL,
+                api_key=_cfg.JINA_API_KEY,
+            )
+        else:
+            logger.info("Loading cross-encoder model: %s", _cfg.RERANK_MODEL)
+            logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
+            _reranker = CrossEncoder(_cfg.RERANK_MODEL)
+        _reranker_key = current_key
+    return _reranker
+
+
+def reset_reranker() -> None:
+    """Reset the reranker singleton, forcing a reload on next access."""
+    global _reranker, _reranker_key
+    _reranker = None
+    _reranker_key = None
+
+
+# Backward compatibility alias
+reset_cross_encoder = reset_reranker
 
 
 QA_PROMPT = PromptTemplate.from_template(
@@ -73,7 +172,7 @@ class HybridRetriever(BaseRetriever):
     vectorstore: FAISS
     bm25: BM25Okapi
     bm25_docs: list[Document]
-    cross_encoder: CrossEncoder
+    cross_encoder: Any
     parent_chunks: list[Document] | None = None
     metadata_filters: dict | None = None
     last_top_rerank_score: float = 0.0
@@ -226,7 +325,7 @@ def build_retriever(vectorstore: FAISS) -> HybridRetriever:
         bm25 = BM25Okapi(tokenized)
         bm25_docs = all_docs
 
-    cross_encoder = _get_cross_encoder()
+    cross_encoder = _get_reranker()
 
     parent_chunks = None
     if ENABLE_PARENT_RETRIEVAL:

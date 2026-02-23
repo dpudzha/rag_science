@@ -68,21 +68,140 @@ class TestLoadParentChunks:
             assert load_parent_chunks() is None
 
 
-class TestCrossEncoderSingleton:
+class TestRerankerSingleton:
     def test_lazy_loaded_once(self):
         import retriever
-        retriever._cross_encoder = None  # Reset
+        retriever.reset_reranker()
         with patch("retriever.CrossEncoder") as MockCE:
             mock_instance = MagicMock()
             MockCE.return_value = mock_instance
 
-            result1 = retriever._get_cross_encoder()
-            result2 = retriever._get_cross_encoder()
+            result1 = retriever._get_reranker()
+            result2 = retriever._get_reranker()
 
             assert result1 is result2
             MockCE.assert_called_once()
 
-        retriever._cross_encoder = None  # Clean up
+        retriever.reset_reranker()
+
+    def test_reloads_on_model_change(self):
+        import retriever
+        import config
+        retriever.reset_reranker()
+        original_model = config.RERANK_MODEL
+        try:
+            with patch("retriever.CrossEncoder") as MockCE:
+                first_instance = MagicMock()
+                second_instance = MagicMock()
+                MockCE.side_effect = [first_instance, second_instance]
+
+                result1 = retriever._get_reranker()
+                assert result1 is first_instance
+                MockCE.assert_called_once_with(original_model)
+
+                config.RERANK_MODEL = "some-other/reranker-model"
+                result2 = retriever._get_reranker()
+                assert result2 is second_instance
+                assert result2 is not result1
+                assert MockCE.call_count == 2
+                MockCE.assert_called_with("some-other/reranker-model")
+        finally:
+            config.RERANK_MODEL = original_model
+            retriever.reset_reranker()
+
+    def test_backend_switch_triggers_reload(self):
+        import retriever
+        import config
+        retriever.reset_reranker()
+        original_backend = config.RERANK_BACKEND
+        try:
+            with patch("retriever.CrossEncoder") as MockCE:
+                first_instance = MagicMock()
+                second_instance = MagicMock()
+                MockCE.side_effect = [first_instance, second_instance]
+
+                config.RERANK_BACKEND = "local"
+                result1 = retriever._get_reranker()
+                assert result1 is first_instance
+
+                # Switching backend with same local model should still reload
+                config.RERANK_BACKEND = "local"
+                result_same = retriever._get_reranker()
+                assert result_same is first_instance  # no reload, same key
+
+                # Switch to a different backend
+                config.RERANK_BACKEND = "cohere"
+                config.COHERE_API_KEY = "test-key"
+                with patch("retriever.CohereReranker") as MockCohere:
+                    cohere_instance = MagicMock()
+                    MockCohere.return_value = cohere_instance
+                    result2 = retriever._get_reranker()
+                    assert result2 is cohere_instance
+                    assert result2 is not result1
+        finally:
+            config.RERANK_BACKEND = original_backend
+            retriever.reset_reranker()
+
+
+class TestCohereReranker:
+    def test_predict_returns_logit_scores(self):
+        import sys
+        mock_cohere = MagicMock()
+        sys.modules["cohere"] = mock_cohere
+
+        try:
+            from retriever import CohereReranker, _prob_to_logit
+
+            mock_client = MagicMock()
+            mock_result_1 = MagicMock()
+            mock_result_1.index = 0
+            mock_result_1.relevance_score = 0.9
+            mock_result_2 = MagicMock()
+            mock_result_2.index = 1
+            mock_result_2.relevance_score = 0.1
+
+            mock_response = MagicMock()
+            mock_response.results = [mock_result_1, mock_result_2]
+            mock_client.rerank.return_value = mock_response
+
+            mock_cohere.ClientV2.return_value = mock_client
+            reranker = CohereReranker(model="rerank-v3.5", api_key="test-key")
+
+            pairs = [["query", "doc1"], ["query", "doc2"]]
+            scores = reranker.predict(pairs)
+
+            assert len(scores) == 2
+            assert scores[0] == pytest.approx(_prob_to_logit(0.9))
+            assert scores[1] == pytest.approx(_prob_to_logit(0.1))
+            mock_client.rerank.assert_called_once()
+        finally:
+            del sys.modules["cohere"]
+
+
+class TestJinaReranker:
+    def test_predict_returns_logit_scores(self):
+        from retriever import JinaReranker, _prob_to_logit
+
+        reranker = JinaReranker(model="jina-reranker-v2-base-multilingual", api_key="test-key")
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "results": [
+                {"index": 0, "relevance_score": 0.85},
+                {"index": 1, "relevance_score": 0.2},
+            ]
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        with patch("httpx.post", return_value=mock_response) as mock_post:
+            pairs = [["query", "doc1"], ["query", "doc2"]]
+            scores = reranker.predict(pairs)
+
+        assert len(scores) == 2
+        assert scores[0] == pytest.approx(_prob_to_logit(0.85))
+        assert scores[1] == pytest.approx(_prob_to_logit(0.2))
+        mock_post.assert_called_once()
 
 
 class TestHybridRetrieverDocKey:

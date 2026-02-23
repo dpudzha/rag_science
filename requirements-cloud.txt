@@ -3,3 +3,4 @@
 #   pip install -r requirements-cloud.txt
 langchain-anthropic>=0.3
 langchain-openai>=0.3
+cohere>=5.0

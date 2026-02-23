@@ -4,7 +4,10 @@ import time
 
 import httpx
 
-from config import OLLAMA_BASE_URL, LLM_BACKEND, ANTHROPIC_API_KEY, OPENAI_API_KEY
+from config import (
+    OLLAMA_BASE_URL, LLM_BACKEND, ANTHROPIC_API_KEY, OPENAI_API_KEY,
+    RERANK_BACKEND, COHERE_API_KEY, JINA_API_KEY,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -59,3 +62,30 @@ def check_backend(retries: int = 5, delay: float = 2) -> bool:
         return True
 
     return check_ollama(retries=retries, delay=delay)
+
+
+def check_rerank_backend() -> bool:
+    """Verify the configured reranker backend has required API keys.
+
+    For local: no check needed (uses sentence-transformers).
+    For cohere: verifies COHERE_API_KEY is set.
+    For jina: verifies JINA_API_KEY is set.
+    """
+    if RERANK_BACKEND == "cohere":
+        if not COHERE_API_KEY:
+            raise ConnectionError(
+                "RERANK_BACKEND=cohere but COHERE_API_KEY is not set."
+            )
+        logger.info("Cohere reranker backend configured (API key set)")
+        return True
+
+    if RERANK_BACKEND == "jina":
+        if not JINA_API_KEY:
+            raise ConnectionError(
+                "RERANK_BACKEND=jina but JINA_API_KEY is not set."
+            )
+        logger.info("Jina reranker backend configured (API key set)")
+        return True
+
+    logger.info("Local reranker backend configured")
+    return True

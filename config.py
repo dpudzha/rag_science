@@ -39,7 +39,12 @@ BM25_WEIGHT = float(os.getenv("BM25_WEIGHT", "0.3"))
 DENSE_WEIGHT = float(os.getenv("DENSE_WEIGHT", "0.7"))
 
 # Reranking
+RERANK_BACKEND = os.getenv("RERANK_BACKEND", "local").lower()
 RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")
+COHERE_API_KEY = os.getenv("COHERE_API_KEY", "")
+COHERE_RERANK_MODEL = os.getenv("COHERE_RERANK_MODEL", "rerank-v3.5")
+JINA_API_KEY = os.getenv("JINA_API_KEY", "")
+JINA_RERANK_MODEL = os.getenv("JINA_RERANK_MODEL", "jina-reranker-v2-base-multilingual")
 
 # Session management
 SESSION_TTL_SECONDS = int(os.getenv("SESSION_TTL_SECONDS", "3600"))
@@ -98,7 +103,9 @@ CHILD_CHUNK_OVERLAP = int(os.getenv("CHILD_CHUNK_OVERLAP", "50"))
 CONFIG_FILE = os.path.join(_PROJECT_ROOT, "config.json")
 
 _TUNABLE_KEYS = [
-    "LLM_BACKEND", "LLM_MODEL", "EMBEDDING_MODEL", "RERANK_MODEL",
+    "LLM_BACKEND", "LLM_MODEL", "EMBEDDING_MODEL",
+    "RERANK_BACKEND", "RERANK_MODEL",
+    "COHERE_RERANK_MODEL", "JINA_RERANK_MODEL",
     "ANTHROPIC_MODEL", "OPENAI_MODEL", "OPENAI_EMBEDDING_MODEL",
     "TOP_K", "TOP_K_CANDIDATES", "BM25_WEIGHT", "DENSE_WEIGHT", "RELEVANCE_THRESHOLD",
     "CHUNK_SIZE", "CHUNK_OVERLAP",

@@ -127,7 +127,7 @@ def _get_reranker() -> Any:
         else:
             logger.info("Loading cross-encoder model: %s", _cfg.RERANK_MODEL)
             logging.getLogger("sentence_transformers").setLevel(logging.WARNING)
-            _reranker = CrossEncoder(_cfg.RERANK_MODEL)
+            _reranker = CrossEncoder(_cfg.RERANK_MODEL, max_length=512)
         _reranker_key = current_key
     return _reranker
 

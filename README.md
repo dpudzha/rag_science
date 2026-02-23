@@ -16,7 +16,7 @@ Question-answering over scientific papers with pluggable LLM backends. Combines 
 - Pluggable LLM backends: Ollama (local), Anthropic, OpenAI
 - Evaluation framework for MRR/Recall@K and experiment comparison
 - React frontend with SSE streaming chat, config panel, and ingestion UI
-- Test suite status: **223 passed**
+- Test suite status: run `pytest tests/ -v`
 
 ### Architecture
 
@@ -219,7 +219,7 @@ All settings are configurable via environment variables. Copy `.env.example` to 
 | `OPENAI_EMBEDDING_MODEL` | `text-embedding-3-small` | Embedding model (OpenAI/Anthropic) |
 | `CHUNK_SIZE` | `500` | Tokens per chunk |
 | `TOP_K` | `4` | Final results returned |
-| `TOP_K_CANDIDATES` | `50` | Candidates before reranking |
+| `TOP_K_CANDIDATES` | `20` | Candidates before reranking |
 | `BM25_WEIGHT` | `0.3` | Keyword retrieval weight |
 | `DENSE_WEIGHT` | `0.7` | Semantic retrieval weight |
 | `ENABLE_S3_INGEST` | `false` | Enable S3 sync before local ingestion |

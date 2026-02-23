@@ -97,14 +97,14 @@ class TestRerankerSingleton:
 
                 result1 = retriever._get_reranker()
                 assert result1 is first_instance
-                MockCE.assert_called_once_with(original_model)
+                MockCE.assert_called_once_with(original_model, max_length=512)
 
                 config.RERANK_MODEL = "some-other/reranker-model"
                 result2 = retriever._get_reranker()
                 assert result2 is second_instance
                 assert result2 is not result1
                 assert MockCE.call_count == 2
-                MockCE.assert_called_with("some-other/reranker-model")
+                MockCE.assert_called_with("some-other/reranker-model", max_length=512)
         finally:
             config.RERANK_MODEL = original_model
             retriever.reset_reranker()

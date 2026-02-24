@@ -60,6 +60,27 @@ class TestChunkDocuments:
         assert chunks[0].metadata["page"] == 1
         assert chunks[-1].metadata["page"] == 2
 
+    def test_page_attribution_with_duplicate_text(self):
+        """Identical text on different pages should still attribute to correct pages."""
+        from ingest import chunk_documents
+        repeated = "The experiment was repeated under identical conditions. " * 60
+        doc = {
+            "pages": [
+                {"text": repeated, "page": 1},
+                {"text": repeated, "page": 2},
+            ],
+            "source": "dup.pdf",
+            "title": "Dup",
+        }
+        with patch("ingest.CHUNK_SIZE", 200), patch("ingest.CHUNK_OVERLAP", 20):
+            chunks = chunk_documents([doc])
+        pages = [c.metadata["page"] for c in chunks]
+        assert 1 in pages
+        assert 2 in pages
+        # Page 2 chunks should appear in the second half
+        midpoint = len(chunks) // 2
+        assert any(p == 2 for p in pages[midpoint:])
+
     def test_respects_token_limit(self):
         from ingest import chunk_documents
         doc = {

@@ -111,57 +111,17 @@ def _to_markdown_lines(text: str) -> str:
     return "\n\n".join(line for line in lines if line)
 
 
-def _markdownify_pages(pages: list[dict], title: str) -> list[dict]:
-    """Wrap extracted page text in markdown headings."""
+def _markdownify_pages(pages: list[dict]) -> list[dict]:
+    """Normalize page text into paragraph-separated form."""
     md_pages = []
     for page_info in pages:
         page_num = page_info.get("page", 1)
         body = _to_markdown_lines(page_info.get("text", ""))
         if not body:
             continue
-        md_text = f"# {title}\n\n## Page {page_num}\n\n{body}"
-        md_pages.append({"text": md_text, "page": page_num})
+        md_pages.append({"text": body, "page": page_num})
     return md_pages
 
-
-def _split_text_by_token_limit(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
-    """Split text into chunks bounded by token count using token spans."""
-    chunks_with_offsets = _split_text_by_token_limit_with_offsets(text, chunk_size, chunk_overlap)
-    return [chunk for chunk, _offset in chunks_with_offsets]
-
-
-def _split_text_by_token_limit_with_offsets(
-    text: str, chunk_size: int, chunk_overlap: int
-) -> list[tuple[str, int]]:
-    """Split text into token-bounded chunks and return each chunk's start offset."""
-    lowered = text.lower()
-    matches = list(_TOKEN_RE.finditer(lowered))
-    if not matches:
-        if text.strip():
-            stripped = text.strip()
-            offset = text.find(stripped)
-            return [(stripped, max(0, offset))]
-        return []
-
-    if chunk_size <= 0:
-        raise ValueError("chunk_size must be positive")
-    overlap = max(0, min(chunk_overlap, chunk_size - 1))
-    stride = chunk_size - overlap
-
-    chunks: list[tuple[str, int]] = []
-    start = 0
-    total_tokens = len(matches)
-    while start < total_tokens:
-        end = min(start + chunk_size, total_tokens)
-        char_start = matches[start].start()
-        char_end = matches[end - 1].end()
-        chunk = text[char_start:char_end].strip()
-        if chunk:
-            chunks.append((chunk, char_start))
-        if end >= total_tokens:
-            break
-        start += stride
-    return chunks
 
 
 def _detect_section_header(text: str) -> str | None:
@@ -212,7 +172,7 @@ def load_new_documents(folder: str) -> tuple[list[dict], list[dict]]:
             if ext == ".pdf":
                 from parsers.pdf_parser import extract_text_from_pdf
                 doc = extract_text_from_pdf(str(file_path))
-                doc["pages"] = _markdownify_pages(doc["pages"], doc["title"])
+                doc["pages"] = _markdownify_pages(doc["pages"])
                 # Extract tables from PDFs if enabled
                 if ENABLE_TABLE_EXTRACTION:
                     from parsers.table_extractor import TableExtractor
@@ -291,29 +251,66 @@ def _page_at_offset(page_offsets: list[int], page_numbers: list[int], offset: in
     return page_numbers[max(0, idx)]
 
 
+def _char_stride(chunk_text: str, overlap_tokens: int) -> int:
+    """Return the character length of the non-overlapping portion of a chunk."""
+    token_spans = list(_TOKEN_RE.finditer(chunk_text.lower()))
+    stride_tokens = max(1, len(token_spans) - overlap_tokens)
+    if stride_tokens < len(token_spans):
+        return token_spans[stride_tokens].start()
+    return len(chunk_text)
+
+
 def chunk_documents(docs: list[dict]) -> list[Document]:
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=CHUNK_SIZE,
+        chunk_overlap=CHUNK_OVERLAP,
+        separators=CHUNK_SEPARATORS,
+        length_function=lambda t: len(_TOKEN_RE.findall(t.lower())),
+    )
+
     all_chunks = []
     for doc in docs:
+        title = doc.get("title", "")
+
+        # Concatenate all pages into one text, tracking page boundaries
         full_text = ""
         page_offsets = []
         page_numbers = []
         for page_info in doc["pages"]:
             page_offsets.append(len(full_text))
             page_numbers.append(page_info["page"])
-            full_text += page_info["text"] + "\n"
+            full_text += page_info.get("text", "") + "\n"
 
         if not full_text.strip():
             continue
 
-        title = doc.get("title", "")
+        # Track search position; advance by stride (non-overlapping portion)
+        # so repeated/identical text maps to successive positions.
+        search_from = 0
+        prev_stride = 0
 
-        chunks = _split_text_by_token_limit_with_offsets(full_text, CHUNK_SIZE, CHUNK_OVERLAP)
-        for chunk_text, offset in chunks:
+        for chunk_doc in splitter.create_documents([full_text]):
+            chunk_text = chunk_doc.page_content.strip()
+            if not chunk_text:
+                continue
+
+            offset = full_text.find(chunk_text, search_from)
+            if offset < 0:
+                # Splitter may have altered whitespace; search by first 80 chars
+                offset = full_text.find(chunk_text[:80], search_from)
+            if offset >= 0:
+                stride = _char_stride(chunk_text, CHUNK_OVERLAP)
+                search_from = offset + stride
+                prev_stride = stride
+            else:
+                # Cannot locate chunk; estimate position from previous stride
+                offset = search_from
+                search_from += prev_stride or len(chunk_text)
             page = _page_at_offset(page_offsets, page_numbers, offset)
 
             # Detect section header from text preceding this chunk
-            preceding_text = full_text[max(0, offset - 500):max(0, offset)] if offset >= 0 else ""
-            section = _detect_section_header(preceding_text)
+            preceding = full_text[max(0, offset - 500):offset]
+            section = _detect_section_header(preceding)
 
             # Build enriched content with title/section prefix
             prefix_parts = []

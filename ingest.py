@@ -52,7 +52,11 @@ def tokenize(text: str) -> list[str]:
 
 
 def file_hash(path: str) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    hasher = hashlib.sha256()
+    with Path(path).open("rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    return hasher.hexdigest()
 
 
 def _embedding_model_id() -> str:
@@ -122,17 +126,29 @@ def _markdownify_pages(pages: list[dict], title: str) -> list[dict]:
 
 def _split_text_by_token_limit(text: str, chunk_size: int, chunk_overlap: int) -> list[str]:
     """Split text into chunks bounded by token count using token spans."""
+    chunks_with_offsets = _split_text_by_token_limit_with_offsets(text, chunk_size, chunk_overlap)
+    return [chunk for chunk, _offset in chunks_with_offsets]
+
+
+def _split_text_by_token_limit_with_offsets(
+    text: str, chunk_size: int, chunk_overlap: int
+) -> list[tuple[str, int]]:
+    """Split text into token-bounded chunks and return each chunk's start offset."""
     lowered = text.lower()
     matches = list(_TOKEN_RE.finditer(lowered))
     if not matches:
-        return [text] if text.strip() else []
+        if text.strip():
+            stripped = text.strip()
+            offset = text.find(stripped)
+            return [(stripped, max(0, offset))]
+        return []
 
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
     overlap = max(0, min(chunk_overlap, chunk_size - 1))
     stride = chunk_size - overlap
 
-    chunks = []
+    chunks: list[tuple[str, int]] = []
     start = 0
     total_tokens = len(matches)
     while start < total_tokens:
@@ -141,7 +157,7 @@ def _split_text_by_token_limit(text: str, chunk_size: int, chunk_overlap: int) -
         char_end = matches[end - 1].end()
         chunk = text[char_start:char_end].strip()
         if chunk:
-            chunks.append(chunk)
+            chunks.append((chunk, char_start))
         if end >= total_tokens:
             break
         start += stride
@@ -291,19 +307,9 @@ def chunk_documents(docs: list[dict]) -> list[Document]:
 
         title = doc.get("title", "")
 
-        chunks = _split_text_by_token_limit(full_text, CHUNK_SIZE, CHUNK_OVERLAP)
-        search_start = 0
-        for chunk_text in chunks:
-            offset = full_text.find(chunk_text, search_start)
-            if offset == -1:
-                offset = full_text.find(chunk_text)
-            if offset != -1:
-                search_start = offset + 1
-                page = _page_at_offset(page_offsets, page_numbers, offset)
-            else:
-                # Chunk text not found in full_text; use last known page
-                # instead of incorrectly defaulting to page 1.
-                page = page_numbers[-1] if page_numbers else 1
+        chunks = _split_text_by_token_limit_with_offsets(full_text, CHUNK_SIZE, CHUNK_OVERLAP)
+        for chunk_text, offset in chunks:
+            page = _page_at_offset(page_offsets, page_numbers, offset)
 
             # Detect section header from text preceding this chunk
             preceding_text = full_text[max(0, offset - 500):max(0, offset)] if offset >= 0 else ""
@@ -395,16 +401,47 @@ def get_embeddings():
 
 def build_bm25(docs: list[Document]) -> tuple[BM25Okapi, list[Document]]:
     """Build BM25 index from documents."""
-    tokenized = [tokenize(doc.page_content) for doc in docs]
-    bm25 = BM25Okapi(tokenized)
+    bm25, _tokenized = _build_bm25_with_tokens(docs)
     return bm25, docs
 
 
-def save_bm25(bm25: BM25Okapi, docs: list[Document], directory: str) -> None:
+def _build_bm25_with_tokens(docs: list[Document]) -> tuple[BM25Okapi, list[list[str]]]:
+    tokenized = [tokenize(doc.page_content) for doc in docs]
+    return BM25Okapi(tokenized), tokenized
+
+
+def _load_bm25_data(directory: str) -> dict | None:
+    """Load BM25 payload from disk, returning None when unavailable or invalid."""
+    bm25_path = Path(directory) / "bm25_index.pkl"
+    if not bm25_path.exists():
+        return None
+    try:
+        with open(bm25_path, "rb") as f:
+            data = pickle.load(f)
+        if not isinstance(data, dict):
+            logger.warning("Invalid BM25 payload type at %s; ignoring", bm25_path)
+            return None
+        if "bm25" not in data or "docs" not in data:
+            logger.warning("BM25 payload missing required keys at %s; ignoring", bm25_path)
+            return None
+        return data
+    except Exception as e:
+        logger.warning("Failed to load BM25 payload from %s: %s", bm25_path, e)
+        return None
+
+
+def save_bm25(
+    bm25: BM25Okapi,
+    docs: list[Document],
+    directory: str,
+    tokenized_docs: list[list[str]] | None = None,
+) -> None:
     """Save BM25 index and document list to disk."""
     bm25_path = Path(directory) / "bm25_index.pkl"
+    if tokenized_docs is None:
+        tokenized_docs = [tokenize(doc.page_content) for doc in docs]
     with open(bm25_path, "wb") as f:
-        pickle.dump({"bm25": bm25, "docs": docs}, f)
+        pickle.dump({"bm25": bm25, "docs": docs, "tokenized_docs": tokenized_docs}, f)
     logger.info("BM25 index saved to %s", bm25_path)
 
 
@@ -444,6 +481,7 @@ def _save_vectorstore_atomic(
     store: FAISS,
     bm25: BM25Okapi,
     bm25_docs: list[Document],
+    bm25_tokenized_docs: list[list[str]] | None = None,
     parent_chunks: list[Document] | None = None,
     ingest_record: dict | None = None,
 ):
@@ -454,7 +492,7 @@ def _save_vectorstore_atomic(
 
     try:
         store.save_local(tmp_dir)
-        save_bm25(bm25, bm25_docs, tmp_dir)
+        save_bm25(bm25, bm25_docs, tmp_dir, tokenized_docs=bm25_tokenized_docs)
 
         if parent_chunks is not None:
             parents_path = Path(tmp_dir) / "parent_chunks.pkl"
@@ -516,6 +554,39 @@ def load_existing_vectorstore() -> FAISS | None:
 def _get_all_docs_from_store(store: FAISS) -> list[Document]:
     """Extract all documents from a FAISS vectorstore's docstore."""
     return [store.docstore.search(doc_id) for doc_id in store.index_to_docstore_id.values()]
+
+
+def _build_or_update_bm25(
+    store: FAISS,
+    new_docs: list[Document],
+    allow_incremental: bool,
+) -> tuple[BM25Okapi, list[Document], list[list[str]]]:
+    """Build BM25 from scratch or update incrementally from persisted tokenized docs."""
+    if allow_incremental:
+        existing = _load_bm25_data(VECTORSTORE_DIR)
+        if existing:
+            existing_docs = existing.get("docs") or []
+            existing_tokenized = existing.get("tokenized_docs")
+            if (
+                isinstance(existing_docs, list)
+                and isinstance(existing_tokenized, list)
+                and len(existing_docs) == len(existing_tokenized)
+            ):
+                tokenized_new_docs = [tokenize(doc.page_content) for doc in new_docs]
+                combined_docs = existing_docs + new_docs
+                combined_tokenized = existing_tokenized + tokenized_new_docs
+                bm25 = BM25Okapi(combined_tokenized)
+                logger.info(
+                    "BM25 incremental update: %d existing + %d new documents",
+                    len(existing_docs),
+                    len(new_docs),
+                )
+                return bm25, combined_docs, combined_tokenized
+            logger.info("BM25 incremental update unavailable (missing/invalid tokenized docs); rebuilding")
+
+    all_docs = _get_all_docs_from_store(store)
+    bm25, tokenized_docs = _build_bm25_with_tokens(all_docs)
+    return bm25, all_docs, tokenized_docs
 
 
 def _save_large_tables_to_sql(large_tables: list[dict]) -> list[Document]:
@@ -614,7 +685,7 @@ def ingest() -> None:
             logger.info("No chunks generated; skipping vectorstore update.")
             save_ingest_record(updated_record)
             return
-        # Combine all docs for BM25 (use parent chunks for better keyword matching)
+        # Combine all docs for BM25
         all_parents = parent_chunks
         if existing:
             parents_path = Path(VECTORSTORE_DIR) / "parent_chunks.pkl"
@@ -622,10 +693,18 @@ def ingest() -> None:
                 with open(parents_path, "rb") as f:
                     existing_parents = pickle.load(f)
                 all_parents = existing_parents + parent_chunks
-        all_store_docs = _get_all_docs_from_store(store)
-        bm25, bm25_docs = build_bm25(all_store_docs)
+        bm25, bm25_docs, bm25_tokenized_docs = _build_or_update_bm25(
+            store=store,
+            new_docs=child_chunks,
+            allow_incremental=existing is not None,
+        )
         _save_vectorstore_atomic(
-            store, bm25, bm25_docs, all_parents, ingest_record=updated_record
+            store,
+            bm25,
+            bm25_docs,
+            bm25_tokenized_docs=bm25_tokenized_docs,
+            parent_chunks=all_parents,
+            ingest_record=updated_record,
         )
     else:
         chunks = chunk_documents(docs)
@@ -639,9 +718,18 @@ def ingest() -> None:
             logger.info("No vectorstore available; skipping vectorstore update.")
             save_ingest_record(updated_record)
             return
-        all_docs = _get_all_docs_from_store(store)
-        bm25, bm25_docs = build_bm25(all_docs)
-        _save_vectorstore_atomic(store, bm25, bm25_docs, ingest_record=updated_record)
+        bm25, bm25_docs, bm25_tokenized_docs = _build_or_update_bm25(
+            store=store,
+            new_docs=chunks,
+            allow_incremental=existing is not None,
+        )
+        _save_vectorstore_atomic(
+            store,
+            bm25,
+            bm25_docs,
+            bm25_tokenized_docs=bm25_tokenized_docs,
+            ingest_record=updated_record,
+        )
 
 
 if __name__ == "__main__":

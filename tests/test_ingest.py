@@ -147,7 +147,63 @@ class TestBuildBm25:
             data = pickle.load(f)
         assert "bm25" in data
         assert "docs" in data
+        assert "tokenized_docs" in data
         assert len(data["docs"]) == len(sample_documents)
+        assert len(data["tokenized_docs"]) == len(sample_documents)
+
+
+class TestBm25Incremental:
+    def test_incremental_update_uses_existing_tokenized_docs(self):
+        from ingest import _build_or_update_bm25
+
+        existing_doc = Document(page_content="existing text", metadata={"source": "a"})
+        new_doc = Document(page_content="new text", metadata={"source": "b"})
+        fake_store = MagicMock()
+        existing_payload = {
+            "bm25": MagicMock(),
+            "docs": [existing_doc],
+            "tokenized_docs": [["existing", "text"]],
+        }
+
+        with patch("ingest._load_bm25_data", return_value=existing_payload), \
+             patch("ingest._get_all_docs_from_store") as mock_get_all:
+            bm25, docs, tokenized_docs = _build_or_update_bm25(
+                store=fake_store,
+                new_docs=[new_doc],
+                allow_incremental=True,
+            )
+
+        assert len(docs) == 2
+        assert docs[0] == existing_doc
+        assert docs[1] == new_doc
+        assert len(tokenized_docs) == 2
+        assert tokenized_docs[0] == ["existing", "text"]
+        assert tokenized_docs[1] == ["new", "text"]
+        assert len(bm25.get_scores(["text"])) == 2
+        mock_get_all.assert_not_called()
+
+    def test_incremental_falls_back_when_tokenized_docs_missing(self):
+        from ingest import _build_or_update_bm25
+
+        all_docs = [
+            Document(page_content="fallback one", metadata={"source": "a"}),
+            Document(page_content="fallback two", metadata={"source": "b"}),
+        ]
+        fake_store = MagicMock()
+        invalid_payload = {"bm25": MagicMock(), "docs": [all_docs[0]]}
+
+        with patch("ingest._load_bm25_data", return_value=invalid_payload), \
+             patch("ingest._get_all_docs_from_store", return_value=all_docs) as mock_get_all:
+            bm25, docs, tokenized_docs = _build_or_update_bm25(
+                store=fake_store,
+                new_docs=[],
+                allow_incremental=True,
+            )
+
+        assert docs == all_docs
+        assert len(tokenized_docs) == len(all_docs)
+        assert len(bm25.get_scores(["fallback"])) == len(all_docs)
+        mock_get_all.assert_called_once_with(fake_store)
 
 
 class TestTokenize:
@@ -296,8 +352,8 @@ class TestIngestFlow:
              patch("ingest.load_existing_vectorstore", return_value=None), \
              patch("ingest.chunk_documents", return_value=sample_documents), \
              patch("ingest.build_vectorstore", return_value=fake_store), \
-             patch("ingest._get_all_docs_from_store", return_value=sample_documents), \
-             patch("ingest.build_bm25", return_value=(MagicMock(), sample_documents)), \
+             patch("ingest._build_or_update_bm25",
+                   return_value=(MagicMock(), sample_documents, [["sample"]] * len(sample_documents))), \
              patch("ingest._save_vectorstore_atomic") as mock_save_atomic, \
              patch("ingest.save_ingest_record") as mock_save_ingest_record:
             ingest.ingest()

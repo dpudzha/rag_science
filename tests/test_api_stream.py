@@ -92,7 +92,7 @@ class TestStreamEventOrdering:
             ),
         ]
         mock_retriever = MagicMock()
-        mock_retriever.model_copy.return_value = mock_retriever
+        mock_retriever.for_request.return_value = mock_retriever
         mock_retriever.invoke.return_value = mock_docs
 
         mock_llm = _make_mock_llm(["The", " answer"])
@@ -132,7 +132,7 @@ class TestStreamEventOrdering:
     def test_stream_includes_relevance_metadata(self, client):
         """Metadata event includes relevance_score and retry_count when available."""
         mock_retriever = MagicMock()
-        mock_retriever.model_copy.return_value = mock_retriever
+        mock_retriever.for_request.return_value = mock_retriever
 
         fake_rel_module = types.SimpleNamespace(
             RelevanceChecker=MagicMock(return_value=object()),
@@ -223,7 +223,7 @@ class TestStreamErrors:
     def test_generation_error_emits_error_event(self, client):
         """If the LLM fails mid-stream, an error event is emitted."""
         mock_retriever = MagicMock()
-        mock_retriever.model_copy.return_value = mock_retriever
+        mock_retriever.for_request.return_value = mock_retriever
         mock_retriever.invoke.return_value = []
 
         mock_llm = _make_mock_llm(["partial", "BOOM"], fail_after=1)
@@ -254,7 +254,7 @@ class TestStreamSessionHistory:
         import api
 
         mock_retriever = MagicMock()
-        mock_retriever.model_copy.return_value = mock_retriever
+        mock_retriever.for_request.return_value = mock_retriever
         mock_retriever.invoke.return_value = []
 
         mock_llm = _make_mock_llm(["Hello", " world"])

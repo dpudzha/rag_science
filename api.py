@@ -174,6 +174,57 @@ def _apply_query_preprocessing(question: str, retriever=None) -> str:
     )
 
 
+def _resolve_followup_question(question: str, chat_history: list) -> str:
+    """Resolve follow-up questions into standalone questions when enabled."""
+    resolver = _get_query_resolver()
+    if resolver and chat_history:
+        return resolver.resolve(question, chat_history)
+    return question
+
+
+def _get_chitchat_response(question: str) -> str | None:
+    """Return canned chitchat response when intent classifier indicates one."""
+    classifier = _get_intent_classifier()
+    if not classifier:
+        return None
+    intent = classifier.classify(question)
+    return classifier.get_chitchat_response(intent)
+
+
+def _prepare_query_execution(
+    resolved_question: str,
+    request_retriever,
+    include_docs: bool = False,
+) -> tuple[str, float | None, int | None, list]:
+    """Prepare preprocessed query and optional prefetched docs for execution."""
+    processed_question = _apply_query_preprocessing(resolved_question, request_retriever)
+
+    relevance_score = None
+    retry_count = None
+    docs = []
+
+    if RELEVANCE_CHECK_ENABLED and request_retriever is not None:
+        from relevance_checker import RelevanceChecker, retrieve_with_relevance_check
+        checker = RelevanceChecker(
+            threshold=RELEVANCE_THRESHOLD,
+            use_cross_encoder_score=USE_CROSS_ENCODER_RELEVANCE,
+        )
+        docs, rel_info = retrieve_with_relevance_check(
+            request_retriever, processed_question, checker,
+            max_retries=MAX_RETRIEVAL_RETRIES,
+        )
+        relevance_score = rel_info["score"]
+        retry_count = rel_info["retry_count"]
+        if rel_info["retry_count"] > 0:
+            processed_question = _apply_query_preprocessing(
+                rel_info["final_query"], request_retriever,
+            )
+    elif include_docs and request_retriever is not None:
+        docs = request_retriever.invoke(processed_question)
+
+    return processed_question, relevance_score, retry_count, docs
+
+
 # --- Lifespan: health check on startup ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -255,18 +306,12 @@ def query(req: QueryRequest) -> QueryResponse:
 
     # Resolve follow-up questions before intent classification so that
     # bare follow-ups like "Why?" are resolved into full questions first.
-    resolver = _get_query_resolver()
-    resolved_question = req.question
-    if resolver and chat_history:
-        resolved_question = resolver.resolve(req.question, chat_history)
+    resolved_question = _resolve_followup_question(req.question, chat_history)
 
     # Intent classification: skip RAG for greetings/chitchat
-    classifier = _get_intent_classifier()
-    if classifier:
-        intent = classifier.classify(resolved_question)
-        response = classifier.get_chitchat_response(intent)
-        if response:
-            return QueryResponse(answer=response, sources=[], session_id=req.session_id)
+    chitchat_response = _get_chitchat_response(resolved_question)
+    if chitchat_response:
+        return QueryResponse(answer=chitchat_response, sources=[], session_id=req.session_id)
 
     try:
         qa = _get_qa()
@@ -276,28 +321,12 @@ def query(req: QueryRequest) -> QueryResponse:
         raise HTTPException(status_code=503, detail=f"LLM backend unavailable: {e}")
 
     try:
-        # Per-request retriever copy to avoid mutating shared state (weights, filters)
-        request_retriever = _retriever.model_copy() if _retriever is not None else None
+        # Request-scoped retriever avoids mutating shared state without cloning heavy internals.
+        request_retriever = _retriever.for_request() if _retriever is not None else None
 
-        processed_question = _apply_query_preprocessing(resolved_question, request_retriever)
-
-        # Relevance checking with retry
-        relevance_score = None
-        retry_count = None
-        if RELEVANCE_CHECK_ENABLED and request_retriever is not None:
-            from relevance_checker import RelevanceChecker, retrieve_with_relevance_check
-            checker = RelevanceChecker(threshold=RELEVANCE_THRESHOLD,
-                                       use_cross_encoder_score=USE_CROSS_ENCODER_RELEVANCE)
-            _, rel_info = retrieve_with_relevance_check(
-                request_retriever, processed_question, checker,
-                max_retries=MAX_RETRIEVAL_RETRIES,
-            )
-            relevance_score = rel_info["score"]
-            retry_count = rel_info["retry_count"]
-            if rel_info["retry_count"] > 0:
-                processed_question = _apply_query_preprocessing(
-                    rel_info["final_query"], request_retriever,
-                )
+        processed_question, relevance_score, retry_count, _ = _prepare_query_execution(
+            resolved_question, request_retriever, include_docs=False
+        )
 
         # Check if using agent or chain
         if ENABLE_SQL_AGENT and _agent is not None:
@@ -371,26 +400,20 @@ async def query_stream(req: QueryRequest):
 
     # Resolve follow-up questions before intent classification so that
     # bare follow-ups like "Why?" are resolved into full questions first.
-    resolver = _get_query_resolver()
-    resolved_question = req.question
-    if resolver and chat_history:
-        resolved_question = resolver.resolve(req.question, chat_history)
+    resolved_question = _resolve_followup_question(req.question, chat_history)
 
     # Intent classification: short-circuit for greetings/chitchat
-    classifier = _get_intent_classifier()
-    if classifier:
-        intent = classifier.classify(resolved_question)
-        response = classifier.get_chitchat_response(intent)
-        if response:
-            async def _chitchat_stream():
-                yield _format_sse("metadata", {
-                    "sources": [], "session_id": req.session_id,
-                })
-                yield _format_sse("token", {"token": response})
-                yield _format_sse("done", {})
-            return StreamingResponse(
-                _chitchat_stream(), media_type="text/event-stream",
-            )
+    chitchat_response = _get_chitchat_response(resolved_question)
+    if chitchat_response:
+        async def _chitchat_stream():
+            yield _format_sse("metadata", {
+                "sources": [], "session_id": req.session_id,
+            })
+            yield _format_sse("token", {"token": chitchat_response})
+            yield _format_sse("done", {})
+        return StreamingResponse(
+            _chitchat_stream(), media_type="text/event-stream",
+        )
 
     # Load QA chain / retriever
     try:
@@ -409,33 +432,12 @@ async def query_stream(req: QueryRequest):
 
         return StreamingResponse(_conn_err(), media_type="text/event-stream")
 
-    # Per-request retriever copy
-    request_retriever = _retriever.model_copy() if _retriever is not None else None
+    # Request-scoped retriever avoids mutating shared state without cloning heavy internals.
+    request_retriever = _retriever.for_request() if _retriever is not None else None
 
-    processed_question = _apply_query_preprocessing(resolved_question, request_retriever)
-
-    # Relevance checking with retry
-    relevance_score = None
-    retry_count = None
-    docs = []
-    if RELEVANCE_CHECK_ENABLED and request_retriever is not None:
-        from relevance_checker import RelevanceChecker, retrieve_with_relevance_check
-        checker = RelevanceChecker(
-            threshold=RELEVANCE_THRESHOLD,
-            use_cross_encoder_score=USE_CROSS_ENCODER_RELEVANCE,
-        )
-        docs, rel_info = retrieve_with_relevance_check(
-            request_retriever, processed_question, checker,
-            max_retries=MAX_RETRIEVAL_RETRIES,
-        )
-        relevance_score = rel_info["score"]
-        retry_count = rel_info["retry_count"]
-        if rel_info["retry_count"] > 0:
-            processed_question = _apply_query_preprocessing(
-                rel_info["final_query"], request_retriever,
-            )
-    elif request_retriever is not None:
-        docs = request_retriever.invoke(processed_question)
+    processed_question, relevance_score, retry_count, docs = _prepare_query_execution(
+        resolved_question, request_retriever, include_docs=True
+    )
 
     # Stream the LLM directly — ConversationalRetrievalChain doesn't yield
     # incremental tokens, so we bypass the chain and call the LLM directly.

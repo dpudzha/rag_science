@@ -183,6 +183,22 @@ class HybridRetriever(BaseRetriever):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
+    def for_request(self) -> "HybridRetriever":
+        """Create a lightweight per-request retriever sharing heavy internals."""
+        return HybridRetriever.model_construct(
+            vectorstore=self.vectorstore,
+            bm25=self.bm25,
+            bm25_docs=self.bm25_docs,
+            cross_encoder=self.cross_encoder,
+            parent_chunks=self.parent_chunks,
+            metadata_filters=None,
+            last_top_rerank_score=0.0,
+            k=self.k,
+            k_candidates=self.k_candidates,
+            bm25_weight=self.bm25_weight,
+            dense_weight=self.dense_weight,
+        )
+
     @staticmethod
     def _doc_key(doc: Document) -> str:
         """Content-based key so the same chunk from FAISS and BM25 merges scores."""

@@ -148,6 +148,7 @@ def load_new_documents(folder: str) -> tuple[list[dict], list[dict]]:
         "pdf": "*.pdf",
         "docx": "*.docx",
         "xlsx": "*.xlsx",
+        "md": "*.md",
     }
 
     all_files = []

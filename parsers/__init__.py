@@ -30,5 +30,8 @@ def get_parser(path: str) -> Parser:
     elif ext in (".xlsx", ".xls"):
         from parsers.xlsx_parser import XLSXParser
         return XLSXParser()
+    elif ext == ".md":
+        from parsers.md_parser import MDParser
+        return MDParser()
     else:
         raise ValueError(f"Unsupported file format: {ext}")

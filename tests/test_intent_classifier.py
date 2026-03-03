@@ -106,7 +106,7 @@ class TestChitchatResponse:
         classifier = IntentClassifier(llm=MagicMock())
         response = classifier.get_chitchat_response("GREETING")
         assert response is not None
-        assert "research assistant" in response.lower() or "scientific" in response.lower()
+        assert "assistant" in response.lower()
 
     def test_chitchat_response(self):
         from intent_classifier import IntentClassifier

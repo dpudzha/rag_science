@@ -248,13 +248,9 @@ class TestConcurrencySafety:
         sentinel_chain = object()
         calls = {"load": 0, "retriever": 0, "chain": 0}
 
-        def _slow_vectorstore():
+        def _build_retriever_auto():
             calls["load"] += 1
             time.sleep(0.03)
-            return "vs"
-
-        def _build_retriever(_):
-            calls["retriever"] += 1
             return "retriever"
 
         def _build_qa_chain(_):
@@ -262,8 +258,7 @@ class TestConcurrencySafety:
             return sentinel_chain
 
         fake_retriever_module = types.SimpleNamespace(
-            load_vectorstore=_slow_vectorstore,
-            build_retriever=_build_retriever,
+            build_retriever_auto=_build_retriever_auto,
             build_qa_chain=_build_qa_chain,
         )
 
@@ -276,7 +271,6 @@ class TestConcurrencySafety:
 
         assert all(r is sentinel_chain for r in results)
         assert calls["load"] == 1
-        assert calls["retriever"] == 1
         assert calls["chain"] == 1
 
 

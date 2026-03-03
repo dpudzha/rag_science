@@ -19,6 +19,7 @@ from retriever import (
     PreloadedRetriever,
     load_vectorstore,
     build_retriever,
+    build_retriever_auto,
     build_qa_chain,
 )
 
@@ -215,8 +216,7 @@ def interactive() -> None:
     from health import check_backend
     check_backend()
 
-    vectorstore = load_vectorstore()
-    retriever = build_retriever(vectorstore)
+    retriever = build_retriever_auto()
     # Non-streaming chain kept as fallback for agent path
     qa = None if ENABLE_SQL_AGENT else build_qa_chain(retriever)
     agent = build_agent(retriever) if ENABLE_SQL_AGENT else None
@@ -258,8 +258,7 @@ def ask(question: str) -> None:
     from health import check_backend
     check_backend()
 
-    vectorstore = load_vectorstore()
-    retriever = build_retriever(vectorstore)
+    retriever = build_retriever_auto()
     qa = None if ENABLE_SQL_AGENT else build_qa_chain(retriever)
     agent = build_agent(retriever) if ENABLE_SQL_AGENT else None
     streaming = not ENABLE_SQL_AGENT

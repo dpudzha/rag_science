@@ -134,13 +134,17 @@ def _detect_section_header(text: str) -> str | None:
     return None
 
 
-def load_new_documents(folder: str) -> tuple[list[dict], list[dict]]:
+def load_new_documents(folder: str, record: dict | None = None) -> tuple[list[dict], list[dict]]:
     """Load new documents of all supported formats.
 
     Returns (docs, large_tables) where large_tables are tables with >LARGE_TABLE_THRESHOLD rows
     to be routed to SQLite.
+
+    Pass ``record`` to override the default LangChain ingest record (e.g. to use
+    a backend-specific record such as the LlamaIndex one).
     """
-    record = load_ingest_record()
+    if record is None:
+        record = load_ingest_record()
     folder_path = Path(folder)
 
     # Collect all supported files

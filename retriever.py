@@ -358,7 +358,32 @@ def build_retriever(vectorstore: FAISS) -> HybridRetriever:
     )
 
 
-def build_qa_chain(retriever: HybridRetriever, streaming: bool = False) -> ConversationalRetrievalChain:
+class _LlamaIndexRetrieverAdapter(BaseRetriever):
+    """Adapts LlamaIndexHybridRetriever to LangChain's BaseRetriever interface.
+
+    Required because ConversationalRetrievalChain expects a BaseRetriever.
+    Uses `inner` (public) to avoid Pydantic v2 private-attribute mechanics.
+    """
+    inner: Any
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def _get_relevant_documents(self, query: str, **kwargs) -> list[Document]:
+        return self.inner.invoke(query)
+
+
+def build_retriever_auto():
+    """Dispatch factory: returns the appropriate retriever based on RETRIEVER_BACKEND."""
+    import config as _cfg
+    if _cfg.RETRIEVER_BACKEND == "llamaindex":
+        from retriever_llamaindex import build_llamaindex_retriever
+        return build_llamaindex_retriever()
+    vs = load_vectorstore()
+    return build_retriever(vs)
+
+
+def build_qa_chain(retriever, streaming: bool = False) -> ConversationalRetrievalChain:
+    if not isinstance(retriever, BaseRetriever):
+        retriever = _LlamaIndexRetrieverAdapter(inner=retriever)
     llm = get_default_llm(temperature=0, streaming=streaming)
     return ConversationalRetrievalChain.from_llm(
         llm=llm,

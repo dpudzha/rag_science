@@ -46,9 +46,8 @@ def _get_qa():
     if _qa_chain is None and _agent is None:
         with _qa_init_lock:
             if _qa_chain is None and _agent is None:
-                from retriever import load_vectorstore, build_retriever, build_qa_chain
-                vs = load_vectorstore()
-                _retriever = build_retriever(vs)
+                from retriever import build_retriever_auto, build_qa_chain
+                _retriever = build_retriever_auto()
                 if ENABLE_SQL_AGENT:
                     from query import build_agent
                     _agent = build_agent(_retriever)
@@ -488,8 +487,13 @@ def ingest() -> IngestResponse:
     if not _ingest_lock.acquire(blocking=False):
         raise HTTPException(status_code=409, detail="Ingestion already in progress")
     try:
-        from ingest import ingest as run_ingest
-        run_ingest()
+        import config as _cfg
+        if _cfg.RETRIEVER_BACKEND == "llamaindex":
+            from ingest_llamaindex import ingest_llamaindex
+            ingest_llamaindex()
+        else:
+            from ingest import ingest as run_ingest
+            run_ingest()
         # Reset cached chain so next query picks up new documents
         with _qa_init_lock:
             _qa_chain = None

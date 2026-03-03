@@ -11,8 +11,8 @@
       3
     ],
     "expected_chunk_ids": [
-      "2502.05097v1.pdf|p2|23b357c95116",
-      "1_ATLAS ITk Pixel Detector Overview.pdf|p3|fd78f7da6afe",
+      "2502.05097v1.pdf|p2|6ee9d82b0bc0",
+      "1_ATLAS ITk Pixel Detector Overview.pdf|p3|0abcc2e65824",
       "2502.05097v1.pdf|p2|4fa71090f2d2"
     ]
   },
@@ -30,9 +30,9 @@
       3
     ],
     "expected_chunk_ids": [
-      "2502.05097v1.pdf|p2|23b357c95116",
-      "rd53cATLAS1v92.pdf|p6|2fa357936343",
-      "6_ATLAS ITk pixel detector overview.pdf|p3|fdb404f03cd8"
+      "2502.05097v1.pdf|p2|6ee9d82b0bc0",
+      "rd53cATLAS1v92.pdf|p6|cef5c8d02c1d",
+      "6_ATLAS ITk pixel detector overview.pdf|p3|444c401a8053"
     ]
   },
   {
@@ -49,9 +49,9 @@
       2
     ],
     "expected_chunk_ids": [
-      "6_ATLAS ITk pixel detector overview.pdf|p1|231cdde5bda1",
-      "1_Alkakhi_2024_J._Inst._19_C11013.pdf|p1|4e31b7bcad6f",
-      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|87f6d7adc9d2"
+      "6_ATLAS ITk pixel detector overview.pdf|p1|b19bba163526",
+      "1_Alkakhi_2024_J._Inst._19_C11013.pdf|p1|9d844407ac46",
+      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|4d6690923645"
     ]
   },
   {
@@ -68,8 +68,8 @@
       3
     ],
     "expected_chunk_ids": [
-      "2502.05097v1.pdf|p2|23b357c95116",
-      "6_ATLAS ITk pixel detector overview.pdf|p3|fdb404f03cd8",
+      "2502.05097v1.pdf|p2|6ee9d82b0bc0",
+      "6_ATLAS ITk pixel detector overview.pdf|p3|444c401a8053",
       "2502.05097v1.pdf|p2|4fa71090f2d2"
     ]
   },
@@ -84,9 +84,9 @@
       4
     ],
     "expected_chunk_ids": [
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p3|eb4ade2dd7f4",
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p1|e8c89e35e608",
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p4|2ac899729edd"
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p3|9f4438ccab18",
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p1|49ebe6899e6e",
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p4|4c8af8aa4045"
     ]
   },
   {
@@ -101,9 +101,9 @@
       1
     ],
     "expected_chunk_ids": [
-      "1_ACES20200528_Poster_MC_v1.pdf|p1|6a8e87b65e9e",
-      "2_AT2_IP_MG_0010_v2.7.pdf|p1|6ea2b0ccc152",
-      "1_ACES20200528_Poster_MC_v1.pdf|p1|d96f265e036b"
+      "1_ACES20200528_Poster_MC_v1.pdf|p1|5a5fa15c8fcc",
+      "2_AT2_IP_MG_0010_v2.7.pdf|p1|80fdc22058fc",
+      "1_ACES20200528_Poster_MC_v1.pdf|p1|eb5b42ff7e44"
     ]
   },
   {
@@ -122,9 +122,9 @@
       5
     ],
     "expected_chunk_ids": [
-      "6_ATLAS ITk pixel detector overview.pdf|p1|231cdde5bda1",
-      "introduction_guide.pdf|p6|481a7cdd3f66",
-      "introduction_guide.pdf|p6|f54305aa9d7d"
+      "6_ATLAS ITk pixel detector overview.pdf|p1|b19bba163526",
+      "introduction_guide.pdf|p6|8eec02f21fe7",
+      "introduction_guide.pdf|p6|86bcca2c57d0"
     ]
   },
   {
@@ -141,9 +141,9 @@
       4
     ],
     "expected_chunk_ids": [
-      "introduction_guide.pdf|p6|f54305aa9d7d",
-      "introduction_guide.pdf|p6|481a7cdd3f66",
-      "6_ATLAS ITk pixel detector overview.pdf|p4|ee4800da2eef"
+      "introduction_guide.pdf|p6|8eec02f21fe7",
+      "introduction_guide.pdf|p6|86bcca2c57d0",
+      "6_ATLAS ITk pixel detector overview.pdf|p4|ac058362086e"
     ]
   },
   {
@@ -160,8 +160,8 @@
       8
     ],
     "expected_chunk_ids": [
-      "6_ATLAS ITk pixel detector overview.pdf|p2|6ae814ee5e54",
-      "1_ATLAS ITk Pixel Detector Overview.pdf|p4|04aa4a8573d4"
+      "6_ATLAS ITk pixel detector overview.pdf|p2|afd9ec4d64ed",
+      "1_ATLAS ITk Pixel Detector Overview.pdf|p4|66ca63734f94"
     ]
   },
   {
@@ -175,9 +175,9 @@
       11
     ],
     "expected_chunk_ids": [
-      "ITkPixV2_Mironova.pdf|p6|db0b6e5f1f1e",
-      "ITkPixV2_Mironova.pdf|p10|209a53bc57f8",
-      "ITkPixV2_Mironova.pdf|p23|b466146930c0"
+      "ITkPixV2_Mironova.pdf|p6|986ba8f5da59",
+      "ITkPixV2_Mironova.pdf|p11|699bbf8d57fa",
+      "ITkPixV2_Mironova.pdf|p1|551c962e968c"
     ]
   },
   {
@@ -194,9 +194,9 @@
       2
     ],
     "expected_chunk_ids": [
-      "rd53cATLAS1v92.pdf|p6|2fa357936343",
-      "introduction_guide.pdf|p6|f54305aa9d7d",
-      "introduction_guide.pdf|p6|481a7cdd3f66"
+      "rd53cATLAS1v92.pdf|p6|cef5c8d02c1d",
+      "introduction_guide.pdf|p6|86bcca2c57d0",
+      "introduction_guide.pdf|p6|8eec02f21fe7"
     ]
   },
   {
@@ -213,8 +213,8 @@
       2
     ],
     "expected_chunk_ids": [
-      "2502.05097v1.pdf|p1|c6811c3baa8f",
-      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|87f6d7adc9d2"
+      "2502.05097v1.pdf|p1|29434ed6702f",
+      "1_ATLAS ITk Pixel Detector Overview.pdf|p2|4d6690923645"
     ]
   },
   {
@@ -228,9 +228,9 @@
       7
     ],
     "expected_chunk_ids": [
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p6|e6931bd2d076",
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p7|4d72f11f2f6a",
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p1|e8c89e35e608"
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p6|68e2e2704d50",
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p7|cd5e29b3397a",
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p3|9f4438ccab18"
     ]
   },
   {
@@ -244,9 +244,9 @@
       5
     ],
     "expected_chunk_ids": [
-      "2_AT2_IP_MG_0010_v2.7.pdf|p8|3ceb9a691fac",
-      "2_AT2_IP_MG_0010_v2.7.pdf|p11|9aad1234d033",
-      "2_AT2_IP_MG_0010_v2.7.pdf|p10|f93526c33b82"
+      "2_AT2_IP_MG_0010_v2.7.pdf|p8|11fcdbab8c08",
+      "2_AT2_IP_MG_0010_v2.7.pdf|p11|4b290ed6947b",
+      "2_AT2_IP_MG_0010_v2.7.pdf|p10|5a476515ee8d"
     ]
   },
   {
@@ -259,7 +259,7 @@
       8
     ],
     "expected_chunk_ids": [
-      "1_Alkakhi_2024_J._Inst._19_C11013.pdf|p8|580e37bbe733"
+      "1_Alkakhi_2024_J._Inst._19_C11013.pdf|p8|fb8190516192"
     ]
   },
   {
@@ -274,7 +274,7 @@
       7
     ],
     "expected_chunk_ids": [
-      "introduction_guide.pdf|p8|d2204ab9e440"
+      "introduction_guide.pdf|p8|b8ce8a3a5f58"
     ]
   },
   {
@@ -291,8 +291,8 @@
       6
     ],
     "expected_chunk_ids": [
-      "introduction_guide.pdf|p6|f54305aa9d7d",
-      "introduction_guide.pdf|p6|481a7cdd3f66"
+      "introduction_guide.pdf|p6|86bcca2c57d0",
+      "introduction_guide.pdf|p6|8eec02f21fe7"
     ]
   },
   {
@@ -305,9 +305,9 @@
       6
     ],
     "expected_chunk_ids": [
-      "2_AT2_IP_MG_0010_v2.7.pdf|p10|f93526c33b82",
-      "2_AT2_IP_MG_0010_v2.7.pdf|p8|3ceb9a691fac",
-      "2_AT2_IP_MG_0010_v2.7.pdf|p3|0179cc3b8a57"
+      "2_AT2_IP_MG_0010_v2.7.pdf|p8|11fcdbab8c08",
+      "2_AT2_IP_MG_0010_v2.7.pdf|p10|5a476515ee8d",
+      "2_AT2_IP_MG_0010_v2.7.pdf|p3|aafae47d8931"
     ]
   },
   {
@@ -321,9 +321,9 @@
       7
     ],
     "expected_chunk_ids": [
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p3|eb4ade2dd7f4",
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p7|4d72f11f2f6a",
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p6|e6931bd2d076"
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p3|9f4438ccab18",
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p7|cd5e29b3397a",
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p6|68e2e2704d50"
     ]
   },
   {
@@ -337,9 +337,9 @@
       6
     ],
     "expected_chunk_ids": [
-      "Möbius_2022_J._Inst._17_C03042.pdf|p6|f0a862fa36d0",
-      "Möbius_2022_J._Inst._17_C03042.pdf|p7|bb4e4125632a",
-      "Möbius_2022_J._Inst._17_C03042.pdf|p1|5bb0eeb06c4d"
+      "Möbius_2022_J._Inst._17_C03042.pdf|p6|2dc4fc5e075a",
+      "Möbius_2022_J._Inst._17_C03042.pdf|p7|5902ab5445cc",
+      "Möbius_2022_J._Inst._17_C03042.pdf|p5|dd07bc35e59d"
     ]
   },
   {
@@ -352,7 +352,9 @@
       14
     ],
     "expected_chunk_ids": [
-      "Loddo_PSD13.pdf|p14|28a4fb37d8d1"
+      "Loddo_PSD13.pdf|p13|212cfdd206ac",
+      "Loddo_PSD13.pdf|p15|c694b29dee03",
+      "Loddo_PSD13.pdf|p1|c0930913722f"
     ]
   },
   {
@@ -367,8 +369,8 @@
       5
     ],
     "expected_chunk_ids": [
-      "2502.05097v1.pdf|p3|d4d382b5ded6",
-      "6_ATLAS ITk pixel detector overview.pdf|p5|e68f6f122816"
+      "2502.05097v1.pdf|p3|2796908fd47d",
+      "6_ATLAS ITk pixel detector overview.pdf|p5|9cd7ef5812f8"
     ]
   },
   {
@@ -381,7 +383,7 @@
       4
     ],
     "expected_chunk_ids": [
-      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p4|2ac899729edd"
+      "2_FELIX_the_Detector_Interface_for_the_ATLAS_Experim.pdf|p4|4c8af8aa4045"
     ]
   },
   {
@@ -409,8 +411,8 @@
       9
     ],
     "expected_chunk_ids": [
-      "rd53cATLAS1v92.pdf|p5|4ba0bbf44893",
-      "introduction_guide.pdf|p9|f5b2e9f39975"
+      "rd53cATLAS1v92.pdf|p5|0ed36be10930",
+      "introduction_guide.pdf|p9|917d589da489"
     ]
   }
 ]

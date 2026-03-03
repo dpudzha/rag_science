@@ -38,6 +38,12 @@ TOP_K = int(os.getenv("TOP_K", "4"))
 BM25_WEIGHT = float(os.getenv("BM25_WEIGHT", "0.3"))
 DENSE_WEIGHT = float(os.getenv("DENSE_WEIGHT", "0.7"))
 
+# Retrieval backend: "langchain" (default) or "llamaindex"
+# Boot-time structural flag — not in _TUNABLE_KEYS
+RETRIEVER_BACKEND = os.getenv("RETRIEVER_BACKEND", "langchain").lower()
+LLAMAINDEX_VECTORSTORE_DIR = os.getenv("LLAMAINDEX_VECTORSTORE_DIR", os.path.join(_PROJECT_ROOT, "vectorstore_llamaindex"))
+LLAMAINDEX_INGEST_RECORD = os.getenv("LLAMAINDEX_INGEST_RECORD", os.path.join(_PROJECT_ROOT, "vectorstore_llamaindex", "ingested.json"))
+
 # Reranking
 RERANK_BACKEND = os.getenv("RERANK_BACKEND", "local").lower()
 RERANK_MODEL = os.getenv("RERANK_MODEL", "BAAI/bge-reranker-v2-m3")

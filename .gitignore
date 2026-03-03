@@ -6,3 +6,10 @@ vectorstore/
 .env
 CLAUDE.md
 papers/
+
+# Local experiment files (not tracked)
+eval/ablation_runs.jsonl
+eval/golden_dataset_v2.json
+experiments/rag_ablation_study.ipynb
+experiments/rag_ablation_study_baseline.ipynb
+inspect_chunks.py

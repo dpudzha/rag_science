@@ -73,3 +73,32 @@ def get_default_embeddings():
         model=config.EMBEDDING_MODEL,
         base_url=config.OLLAMA_BASE_URL,
     )
+
+
+def get_llamaindex_embeddings():
+    """Create a LlamaIndex embeddings instance based on the configured backend.
+
+    Anthropic doesn't provide an embeddings API, so it falls back to
+    OpenAI embeddings (requires OPENAI_API_KEY to be set).
+    """
+    backend = config.LLM_BACKEND
+
+    if backend in ("openai", "anthropic"):
+        from llama_index.embeddings.openai import OpenAIEmbedding
+        api_key = config.OPENAI_API_KEY
+        if not api_key:
+            raise ValueError(
+                f"LLM_BACKEND={backend} requires OPENAI_API_KEY for embeddings "
+                "(Anthropic does not provide an embeddings API)"
+            )
+        return OpenAIEmbedding(
+            model=config.OPENAI_EMBEDDING_MODEL,
+            api_key=api_key,
+        )
+
+    # Default: ollama
+    from llama_index.embeddings.ollama import OllamaEmbedding
+    return OllamaEmbedding(
+        model_name=config.EMBEDDING_MODEL,
+        base_url=config.OLLAMA_BASE_URL,
+    )

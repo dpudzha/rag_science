@@ -3,8 +3,8 @@ Classify the user's message into one of four intents: GREETING, FAREWELL, CHITCH
 Rules:
 - GREETING: Simple greetings like "hello", "hi", "hey", "good morning", "thanks"
 - FAREWELL: Goodbyes like "bye", "goodbye", "see you", "take care"
-- CHITCHAT: Small talk or non-research questions like "how are you", "what can you do", "tell me a joke", "what's the weather"
-- SUBSTANTIVE: Any question about research, science, papers, methods, data, or anything that requires looking up information
+- CHITCHAT: Small talk or questions unrelated to {SYSTEM_DOMAIN}
+- SUBSTANTIVE: Any question related to {SYSTEM_DOMAIN} or that requires looking up information
 
 Respond with ONLY the intent label (GREETING, FAREWELL, CHITCHAT, or SUBSTANTIVE) on the first line, and nothing else.
 

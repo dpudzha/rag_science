@@ -5,26 +5,22 @@ from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from config import SYSTEM_DOMAIN
 from utils import get_default_llm
 
 logger = logging.getLogger(__name__)
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "intent_classification.txt"
-_PROMPT_TEMPLATE = _PROMPT_PATH.read_text()
+_PROMPT_TEMPLATE = _PROMPT_PATH.read_text().replace("{SYSTEM_DOMAIN}", SYSTEM_DOMAIN)
 
 INTENTS = {"GREETING", "FAREWELL", "CHITCHAT", "SUBSTANTIVE"}
 
 _CHITCHAT_RESPONSES = {
-    "GREETING": "Hello! I'm a scientific research assistant. Ask me questions about the papers in the knowledge base.",
+    "GREETING": f"Hello! I'm an assistant that can answer questions about {SYSTEM_DOMAIN}.",
     "FAREWELL": "Goodbye! Feel free to come back anytime.",
     "CHITCHAT": (
-        "I'm a research assistant that answers questions about the scientific papers "
-        "ingested into my knowledge base. You can ask things like:\n"
-        '  - "What methods were used in [paper]?"\n'
-        '  - "What were the main results?"\n'
-        '  - "Compare the findings across papers"\n'
-        '  - "Summarize the conclusions"\n'
-        "Just ask a specific research question and I'll search the papers for you."
+        f"I'm an assistant that answers questions about {SYSTEM_DOMAIN}. "
+        "Ask a specific question and I'll search the knowledge base for you."
     ),
 }
 

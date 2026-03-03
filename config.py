@@ -59,6 +59,9 @@ CORS_ORIGINS = [
     if origin.strip()
 ]
 
+# Domain configuration — controls intent classifier language and canned responses
+SYSTEM_DOMAIN = os.getenv("SYSTEM_DOMAIN", "research, science, papers, methods, and data")
+
 # Intent classification
 INTENT_CLASSIFICATION_ENABLED = os.getenv("INTENT_CLASSIFICATION_ENABLED", "true").lower() == "true"
 

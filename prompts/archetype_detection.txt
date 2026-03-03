@@ -4,29 +4,29 @@ Priority rule:
 - If the question is primarily an entity/fact lookup (especially starts with "which", "who", "where", or "when"), classify as WHAT_INFORMATION unless it explicitly asks about methods/procedures.
 
 WHAT_INFORMATION — Asking for specific facts, data points, or findings
-  Example: "What was the accuracy of the model?"
-  Example: "What dataset was used?"
-  Example: "Which experiment will be using ITk?"
+  Example: "What is the value or result of X?"
+  Example: "What was used for Y?"
+  Example: "Which option applies to Z?"
 
 HOW_METHODOLOGY — Asking about methods, procedures, or techniques
-  Example: "How was the experiment conducted?"
-  Example: "What training procedure was used?"
+  Example: "How was X carried out?"
+  Example: "What procedure was used for Y?"
 
 COMPARISON — Comparing methods, results, or approaches
-  Example: "How does method A compare to method B?"
-  Example: "Which model performed better?"
+  Example: "Is A better than B?"
+  Example: "Compare X and Y"
 
 DEFINITION — Asking for definitions or explanations of concepts
-  Example: "What is attention mechanism?"
-  Example: "Define transfer learning"
+  Example: "What is X?"
+  Example: "Define Y"
 
 WHY_REASONING — Asking for reasons, explanations, or justifications
-  Example: "Why did the authors choose this approach?"
-  Example: "What causes the performance gap?"
+  Example: "Why does X happen?"
+  Example: "What caused Y?"
 
 SUMMARY — Asking for overviews or summaries
-  Example: "Summarize the main findings"
-  Example: "What is this paper about?"
+  Example: "Summarize the findings on X"
+  Example: "Give an overview of Y"
 
 Respond with ONLY the archetype label on the first line, nothing else.
 

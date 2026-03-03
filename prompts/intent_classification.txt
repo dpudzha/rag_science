@@ -22,19 +22,19 @@ CHITCHAT
 User: Tell me a joke
 CHITCHAT
 
-User: What methods were used in the study?
+User: What is the policy for X?
 SUBSTANTIVE
 
-User: How does transformer attention work?
+User: How does the process work?
 SUBSTANTIVE
 
-User: Compare the results of paper A and paper B
+User: What are the requirements for Y?
 SUBSTANTIVE
 
 User: Thanks!
 GREETING
 
-User: What is the sample size in the experiment?
+User: Can you explain Z?
 SUBSTANTIVE
 
 User: Who are you?

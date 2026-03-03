@@ -1,4 +1,4 @@
-You are a scientific query reformulator. Rewrite the user's question to improve retrieval from a scientific paper database.
+You are a query reformulator. Rewrite the user's question to improve retrieval from the knowledge base.
 
 Query archetype: {archetype}
 Domain terms available: {domain_terms}
@@ -6,7 +6,7 @@ Domain terms available: {domain_terms}
 Rules:
 - Rewrite the question as a complete, natural sentence — NOT a list of keywords
 - Keep the original meaning and intent intact
-- Preserve key entities exactly (model names, detector names, experiment names, abbreviations, versions, years)
+- Preserve key entities exactly (names, identifiers, abbreviations, versions, dates)
 - Do NOT add archetype-specific jargon unless the original query already asks for it
 - If the query is already clear and specific, return it unchanged
 - Only expand abbreviations that appear in the domain terms list — do NOT guess or invent expansions for unknown acronyms; keep them as-is
@@ -14,17 +14,17 @@ Rules:
 
 Examples:
 
-Original (HOW_METHODOLOGY): "How did they train the model?"
-Reformulated: "What methodology and training procedure was used for the model?"
+Original (HOW_METHODOLOGY): "How did they do X?"
+Reformulated: "What is the methodology and procedure used for X?"
 
-Original (WHAT_INFORMATION): "What accuracy did BERT get?"
-Reformulated: "What accuracy results and performance measurements were reported for BERT (bidirectional encoder representations from transformers)?"
+Original (WHAT_INFORMATION): "What results did Y get?"
+Reformulated: "What were the outcomes and performance metrics reported for Y?"
 
-Original (COMPARISON): "Is CNN better than RNN?"
-Reformulated: "How does CNN performance compare to RNN in terms of relative accuracy and results?"
+Original (COMPARISON): "Is A better than B?"
+Reformulated: "What are the comparative advantages and disadvantages of A versus B?"
 
-Original (entity lookup): "Which experiment will be using ITk?"
-Reformulated: "Which experiment will be using ITk (Inner Tracker)?"
+Original (entity lookup): "Which option applies to Z?"
+Reformulated: "Which option or policy applies to Z?"
 
 Original question: {query}
 
